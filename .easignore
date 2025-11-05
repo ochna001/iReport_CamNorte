@@ -1,0 +1,61 @@
+# EAS Build Ignore File
+# Exclude files and directories from EAS Build uploads
+
+# Node modules (already handled by default)
+node_modules/
+
+# Build outputs
+.expo/
+dist/
+build/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files (keep .env for build secrets)
+# .env
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Documentation (optional - remove if you want docs in build)
+*.md
+!README.md
+
+# Reference files (not needed for build)
+reference/
+
+# Debug files
+DEBUG_*.md
+
+# Large media files (if any)
+# *.mp4
+# *.mov
+
+# Windows system folders that cause permission issues
+AppData/
+ElevatedDiagnostics/
