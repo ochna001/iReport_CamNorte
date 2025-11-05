@@ -1,71 +1,82 @@
-# iReport Project Plan - Two Separate Applications
+# iReport Project Plan - Four Application Ecosystem
 
-## Strategic Decision: Two Apps Approach
+## Strategic Decision: Four Apps Approach
 
-### App 1: iReport Resident/Guest (Current Project)
-**Location:** `ireport_v1/`  
-**Target Users:** General public, residents, guests  
-**Status:** 🔄 In Development - Phase 6 (Report Tracking)
+### Architecture Overview
 
-#### Features:
-- ✅ Simple incident reporting (3 steps)
-- ✅ Guest access (no login required)
-- ✅ Resident authentication (track reports)
-- ✅ Camera-first incident capture
-- ✅ GPS and timestamp auto-population
-- ✅ OSM Nominatim reverse geocoding
-- ✅ Three agency buttons (PNP, BFP, PDRRMO)
-- ✅ Camera screen with photo/video capture
-- ✅ Multiple media support with gallery
-- ✅ Media preview modal
-- ✅ Simple incident form (name, age, description)
-- ✅ Report confirmation/summary screen
-- ✅ Anonymous login for guest tracking
-- ✅ Media upload to Supabase Storage
-- ✅ Incident submission to database
-- ✅ Success screen with tracking number
-- ✅ My Reports screen with status tracking
-- ✅ Guest account upgrade prompt
-- ✅ Incident details view with full report information
-- ✅ Media gallery with pagination
-- ✅ Status timeline display
-- ⏳ Real-time status update notifications (push notifications)
-
-#### User Flow:
-1. Open app → See three agency buttons
-2. Tap button → Camera opens immediately
-3. Capture photo/video → Auto-fill form with GPS/timestamp
-4. Add minimal details → Submit
-5. (Optional) Track report if logged in
+```
+┌─────────────────────────────────────────────────────┐
+│              Supabase Backend (Shared)              │
+│  - PostgreSQL Database                              │
+│  - Storage (Media Files)                            │
+│  - Authentication (All User Types)                  │
+│  - Real-time Subscriptions                          │
+│  - Row Level Security (RLS)                         │
+└─────────────────────────────────────────────────────┘
+                          ▲
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+┌───────▼────────┐ ┌──────▼──────┐ ┌───────▼────────┐
+│   Resident     │ │    Field    │ │  Desk Officer  │
+│   Mobile App   │ │   Officer   │ │   Mobile/Web   │
+│                │ │  Mobile App │ │                │
+│ React Native   │ │React Native │ │ React Native   │
+│ (Android/iOS)  │ │(Android/iOS)│ │  or Next.js    │
+└────────────────┘ └─────────────┘ └────────────────┘
+                          │
+                  ┌───────▼────────┐
+                  │  Chief/Admin   │
+                  │    Web App     │
+                  │                │
+                  │    Next.js     │
+                  │   (Vercel)     │
+                  └────────────────┘
+```
 
 ---
 
-### App 2: iReport LGU Officers (Future Project)
-**Location:** `ireport_lgu/` (To be created)  
-**Target Users:** PNP, BFP, PDRRMO officers (Desk, Field, Chief)  
+## App 1: iReport Resident 📱
+**Location:** `ireport_v1/` (Current Project)  
+**Target Users:** General public, residents, guests  
+**Platform:** React Native (Android/iOS)  
+**Status:** ✅ Phase 8 - Ready for Deployment
+
+**See detailed phases:** [RESIDENT_PHASES.md](./RESIDENT_PHASES.md)
+
+---
+
+## App 2: iReport Field Officer 📱
+**Location:** `ireport_field/` (To be created)  
+**Target Users:** PNP, BFP, PDRRMO field officers  
+**Platform:** React Native (Android/iOS)  
 **Status:** ⏳ Not Started
 
-#### Features:
-- Unit selection (PNP/BFP/PDRRMO)
-- Role selection (Desk Officer/Field Officer/Chief)
-- Incident management dashboard
-- Assignment system
-- Active incident monitoring
-- **OSM-based routing** (OSRM for fastest route to incident)
-- **Route visualization** on map with turn-by-turn navigation
-- Final report documentation
-- Advanced authentication with biometrics
-- Real-time notifications
-- Analytics and reporting
-
-#### User Roles:
-- **Desk Officer:** Process and assign incidents
-- **Field Officer:** Respond to assigned incidents
-- **Chief/Admin:** System oversight and management
+**See detailed phases:** [FIELD_OFFICER_PHASES.md](./FIELD_OFFICER_PHASES.md)
 
 ---
 
-## Current Phase: Resident/Guest App
+## App 3: iReport Desk Officer 💻
+**Location:** `ireport_desk/` (To be created)  
+**Target Users:** Desk officers at stations  
+**Platform:** Next.js Web App  
+**Status:** ⏳ Not Started
+
+**See detailed phases:** [DESK_OFFICER_PHASES.md](./DESK_OFFICER_PHASES.md)
+
+---
+
+## App 4: iReport Chief/Admin 💻
+**Location:** `ireport_admin/` (To be created)  
+**Target Users:** Chiefs, administrators, LGU officials  
+**Platform:** Next.js (Vercel)  
+**Status:** ⏳ Not Started
+
+**See detailed phases:** [CHIEF_ADMIN_PHASES.md](./CHIEF_ADMIN_PHASES.md)
+
+---
+
+## Current Focus: Resident App
 
 ### Completed:
 - ✅ **Phase 1:** Project setup with Expo
@@ -142,22 +153,34 @@
 
 ---
 
-## Why Two Apps?
+## Why Four Apps?
 
 ### Benefits:
-1. **Better UX** - Each app tailored to its specific audience
-2. **Security** - Officer features not exposed in public app
-3. **Smaller Size** - Residents don't download unused officer features
-4. **Professional** - Officers get a dedicated, professional tool
-5. **Maintainability** - Clear separation of concerns
-6. **App Store** - Two listings = better visibility
 
-### Shared Components:
+| Benefit | Explanation |
+|---------|-------------|
+| **Role-Specific UX** | Each app tailored to specific workflows and user needs |
+| **Security** | Residents can't access officer features; officers can't access admin |
+| **Performance** | Smaller app sizes, faster load times, optimized for use case |
+| **Platform Choice** | Mobile for field work, web for office/admin work |
+| **Development** | Parallel development by different teams possible |
+| **Deployment** | Independent release cycles, no downtime for all users |
+| **Maintenance** | Easier to update specific roles without affecting others |
+| **App Store** | Multiple listings = better visibility and targeted marketing |
+
+### Shared Backend (Supabase):
+- PostgreSQL database with shared tables
+- Supabase Storage for media files
+- Authentication for all user types
+- Real-time subscriptions
+- Row Level Security (RLS) for data access control
+
+### Shared Code (Potential):
 - Supabase client configuration
-- Color themes
-- Common UI components
-- Database schema
-- API utilities
+- Color themes and design tokens
+- Common UI components (buttons, cards, etc.)
+- Utility functions (geocoding, formatting, etc.)
+- TypeScript types and interfaces
 
 ---
 
