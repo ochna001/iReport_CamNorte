@@ -200,7 +200,7 @@ export default function HomeScreen() {
             onPress={() => handleReportPress('PNP')}
           >
             <Text style={styles.buttonTitle}>Report Crime</Text>
-            <Text style={styles.buttonSubtitle}>Philippine National Police</Text>
+            <Text style={styles.buttonSubtitle}>Philippine National Police (PNP)</Text>
           </TouchableOpacity>
 
           {/* BFP Button */}
@@ -209,7 +209,7 @@ export default function HomeScreen() {
             onPress={() => handleReportPress('BFP')}
           >
             <Text style={styles.buttonTitle}>Report Fire</Text>
-            <Text style={styles.buttonSubtitle}>Bureau of Fire Protection</Text>
+            <Text style={styles.buttonSubtitle}>Bureau of Fire Protection (BFP)</Text>
           </TouchableOpacity>
 
           {/* PDRRMO Button */}
@@ -218,7 +218,7 @@ export default function HomeScreen() {
             onPress={() => handleReportPress('PDRRMO')}
           >
             <Text style={styles.buttonTitle}>Report Disaster</Text>
-            <Text style={styles.buttonSubtitle}>PDRRMO</Text>
+            <Text style={styles.buttonSubtitle}>Disaster Risk Reduction Management Office</Text>
           </TouchableOpacity>
         </View>
 
@@ -272,8 +272,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   buttonSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.9)',
+    flexWrap: 'wrap',
+    lineHeight: 18,
   },
   statsSection: {
     marginBottom: 24,
