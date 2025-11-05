@@ -345,7 +345,7 @@ const LoginScreen = () => {
                     I agree to the{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/yourusername/ireport/blob/main/TERMS_OF_SERVICE.md')}
+                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/TERMS_OF_SERVICE.md')}
                     >
                       Terms of Service
                     </Text>
@@ -367,7 +367,7 @@ const LoginScreen = () => {
                     I agree to the{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/yourusername/ireport/blob/main/PRIVACY_POLICY.md')}
+                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/PRIVACY_POLICY.md')}
                     >
                       Privacy Policy
                     </Text>
