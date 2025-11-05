@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "iReport Camarines Norte",
-    "slug": "ireport-camnorte",
+    "slug": "ireport_v1",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logov1.png",
