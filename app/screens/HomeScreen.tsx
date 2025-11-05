@@ -1,15 +1,15 @@
+import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
   SafeAreaView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
-import { useRouter } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 
 const HomeScreen = () => {
   const { session } = useAuth();
@@ -50,7 +50,7 @@ const HomeScreen = () => {
           >
             <Text style={styles.buttonEmoji}>🚔</Text>
             <Text style={styles.buttonTitle}>Report Crime</Text>
-            <Text style={styles.buttonSubtitle}>Philippine National Police</Text>
+            <Text style={styles.buttonSubtitle}>Philippine National Police (PNP)</Text>
           </TouchableOpacity>
 
           {/* BFP Button */}
@@ -60,7 +60,7 @@ const HomeScreen = () => {
           >
             <Text style={styles.buttonEmoji}>🔥</Text>
             <Text style={styles.buttonTitle}>Report Fire</Text>
-            <Text style={styles.buttonSubtitle}>Bureau of Fire Protection</Text>
+            <Text style={styles.buttonSubtitle}>Bureau of Fire Protection (BFP)</Text>
           </TouchableOpacity>
 
           {/* PDRRMO Button */}
@@ -70,7 +70,7 @@ const HomeScreen = () => {
           >
             <Text style={styles.buttonEmoji}>🌊</Text>
             <Text style={styles.buttonTitle}>Report Disaster</Text>
-            <Text style={styles.buttonSubtitle}>PDRRMO</Text>
+            <Text style={styles.buttonSubtitle}>Provincial Disaster Risk Reduction Management Office (PDRRMO) </Text>
           </TouchableOpacity>
         </View>
 

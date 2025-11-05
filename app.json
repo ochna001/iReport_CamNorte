@@ -4,7 +4,7 @@
     "slug": "ireport_v1",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logov1.png",
     "scheme": "ireportv1",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
