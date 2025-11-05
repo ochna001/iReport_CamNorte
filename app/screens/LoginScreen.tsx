@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { Eye, EyeOff, Fingerprint } from 'lucide-react-native';
+import { Eye, EyeOff, Fingerprint, CheckSquare, Square } from 'lucide-react-native';
+import { Linking } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,23 +21,33 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthProvider';
 
 const LoginScreen = () => {
   const router = useRouter();
+  const { signInAnonymously } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [showGuestAgreement, setShowGuestAgreement] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
-  // Check for biometric hardware and if user has enabled it
+  // Check for biometric hardware and if user has enabled it with saved credentials
   useEffect(() => {
     (async () => {
       const compatible = await LocalAuthentication.hasHardwareAsync();
-      const savedBiometricPref = await AsyncStorage.getItem('useBiometric');
+      const savedBiometricPref = await AsyncStorage.getItem('biometric_enabled');
+      const savedEmail = await SecureStore.getItemAsync('biometric_email');
+      const savedPassword = await SecureStore.getItemAsync('biometric_password');
+      
       setBiometricAvailable(compatible);
-      if (compatible && savedBiometricPref === 'true') {
+      // Only enable biometric if hardware exists, user enabled it, AND credentials are saved
+      if (compatible && savedBiometricPref === 'true' && savedEmail && savedPassword) {
         setBiometricEnabled(true);
       }
     })();
@@ -65,6 +77,12 @@ const LoginScreen = () => {
     if (error) {
       Alert.alert('Login Failed', error.message);
     } else {
+      // Save credentials securely if biometric is enabled
+      const biometricPref = await AsyncStorage.getItem('biometric_enabled');
+      if (biometricPref === 'true') {
+        await SecureStore.setItemAsync('biometric_email', email.trim());
+        await SecureStore.setItemAsync('biometric_password', password);
+      }
       router.replace('/(tabs)');
     }
   };
@@ -77,10 +95,34 @@ const LoginScreen = () => {
 
       if (result.success) {
         setLoading(true);
-        setTimeout(() => {
-          router.replace('/(tabs)');
+        
+        // Retrieve saved credentials from secure storage
+        const savedEmail = await SecureStore.getItemAsync('biometric_email');
+        const savedPassword = await SecureStore.getItemAsync('biometric_password');
+        
+        if (!savedEmail || !savedPassword) {
           setLoading(false);
-        }, 500);
+          Alert.alert('Error', 'No saved credentials found. Please login normally first.');
+          return;
+        }
+        
+        // Authenticate with Supabase using saved credentials
+        const { error } = await supabase.auth.signInWithPassword({
+          email: savedEmail,
+          password: savedPassword,
+        });
+        
+        setLoading(false);
+        
+        if (error) {
+          Alert.alert('Login Failed', 'Saved credentials are invalid. Please login normally.');
+          // Clear invalid credentials
+          await SecureStore.deleteItemAsync('biometric_email');
+          await SecureStore.deleteItemAsync('biometric_password');
+          setBiometricEnabled(false);
+        } else {
+          router.replace('/(tabs)');
+        }
       } else {
         Alert.alert('Authentication Failed', 'Biometric authentication was not successful.');
       }
@@ -89,8 +131,27 @@ const LoginScreen = () => {
     }
   };
 
-  const handleGuestAccess = () => {
-    router.push('/(tabs)');
+  const handleGuestAccessClick = () => {
+    setShowGuestAgreement(true);
+  };
+
+  const handleGuestAccess = async () => {
+    if (!agreedToTerms || !agreedToPrivacy) {
+      Alert.alert('Agreement Required', 'Please agree to the Terms of Service and Privacy Policy to continue as guest.');
+      return;
+    }
+
+    try {
+      setGuestLoading(true);
+      await signInAnonymously();
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to continue as guest. Please try again.');
+      console.error('Guest sign-in error:', error);
+    } finally {
+      setGuestLoading(false);
+      setShowGuestAgreement(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
@@ -247,14 +308,101 @@ const LoginScreen = () => {
 
             <TouchableOpacity
               style={styles.guestButton}
-              onPress={handleGuestAccess}
-              disabled={loading}
+              onPress={handleGuestAccessClick}
+              disabled={loading || guestLoading}
             >
-              <Text style={styles.guestButtonText} numberOfLines={2}> Continue as Guest </Text>
+              {guestLoading ? (
+                <ActivityIndicator color={Colors.text.secondary} size="small" />
+              ) : (
+                <Text style={styles.guestButtonText} numberOfLines={2}> Continue as Guest </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+
+      {/* Guest Agreement Modal */}
+      {showGuestAgreement && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Guest Access Agreement</Text>
+            <Text style={styles.modalText}>
+              As a guest, your reports will be temporary and lost if you logout. Please agree to our policies to continue.
+            </Text>
+
+            <View style={styles.agreementContainer}>
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setAgreedToTerms(!agreedToTerms)}
+              >
+                {agreedToTerms ? (
+                  <CheckSquare size={24} color={Colors.primary} />
+                ) : (
+                  <Square size={24} color={Colors.text.secondary} />
+                )}
+                <View style={styles.checkboxTextContainer}>
+                  <Text style={styles.checkboxText}>
+                    I agree to the{' '}
+                    <Text
+                      style={styles.linkText}
+                      onPress={() => Linking.openURL('https://github.com/yourusername/ireport/blob/main/TERMS_OF_SERVICE.md')}
+                    >
+                      Terms of Service
+                    </Text>
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setAgreedToPrivacy(!agreedToPrivacy)}
+              >
+                {agreedToPrivacy ? (
+                  <CheckSquare size={24} color={Colors.primary} />
+                ) : (
+                  <Square size={24} color={Colors.text.secondary} />
+                )}
+                <View style={styles.checkboxTextContainer}>
+                  <Text style={styles.checkboxText}>
+                    I agree to the{' '}
+                    <Text
+                      style={styles.linkText}
+                      onPress={() => Linking.openURL('https://github.com/yourusername/ireport/blob/main/PRIVACY_POLICY.md')}
+                    >
+                      Privacy Policy
+                    </Text>
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowGuestAgreement(false);
+                  setAgreedToTerms(false);
+                  setAgreedToPrivacy(false);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton, (!agreedToTerms || !agreedToPrivacy) && styles.buttonDisabled]}
+                onPress={handleGuestAccess}
+                disabled={!agreedToTerms || !agreedToPrivacy || guestLoading}
+              >
+                {guestLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Continue</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -408,6 +556,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textDecorationLine: 'underline',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: 20,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  agreementContainer: {
+    marginVertical: 16,
+    gap: 12,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  checkboxTextContainer: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  checkboxText: {
+    fontSize: 14,
+    color: Colors.text.primary,
+    lineHeight: 20,
+  },
+  linkText: {
+    color: Colors.primary,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.secondary,
+  },
+  confirmButton: {
+    backgroundColor: Colors.primary,
+  },
+  cancelButtonText: {
+    color: Colors.text.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  confirmButtonText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });
 

@@ -55,15 +55,11 @@ export default function ReportsScreen() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // For guest users, also fetch reports by device_id
-      if (isAnonymous && deviceId) {
-        // Get reports by either reporter_id OR device_id stored in user metadata
-        const { data, error } = await supabase
-          .from('incidents')
-          .select('*')
-          .or(`reporter_id.eq.${session.user.id},reporter_id.in.(select id from auth.users where raw_user_meta_data->>'device_id'='${deviceId}')`)
-          .order('created_at', { ascending: false });
-
+      // For guest users, only fetch reports by their current session ID
+      // Note: Guest reports are tied to the anonymous session, not the device
+      // If guest logs out, they lose access to their reports
+      if (isAnonymous) {
+        const { data, error } = await query.eq('reporter_id', session.user.id);
         if (error) throw error;
         setIncidents(data || []);
       } else {
@@ -74,7 +70,13 @@ export default function ReportsScreen() {
       }
     } catch (error: any) {
       console.error('Error fetching incidents:', error);
-      Alert.alert('Error', 'Failed to load your reports');
+      // For guest users, silently handle the error since they may not have any reports yet
+      // For authenticated users, show an alert
+      if (!isAnonymous) {
+        Alert.alert('Error', 'Failed to load your reports');
+      }
+      // Set empty array for guest users to show empty state gracefully
+      setIncidents([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -202,7 +204,9 @@ export default function ReportsScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading your reports...</Text>
+        <View style={styles.loadingWrapper}>
+          <Text style={styles.loadingText}>Loading Your Reports...</Text>
+        </View>
       </View>
     );
   }
@@ -295,8 +299,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
   },
-  loadingText: {
+  loadingWrapper: {
+    width: '100%',
+    alignItems: 'center',
     marginTop: 12,
+  },
+  loadingText: {
     fontSize: 16,
     color: Colors.text.secondary,
     textAlign: 'center',

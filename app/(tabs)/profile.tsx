@@ -1,8 +1,11 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -12,10 +15,12 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Calendar } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import AppHeader from '../../components/AppHeader';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -25,9 +30,18 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedYear, setSelectedYear] = useState<number>(2000);
+  const [selectedMonth, setSelectedMonth] = useState<number>(0);
+  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [pickerStep, setPickerStep] = useState<'year' | 'month' | 'day'>('year');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showHomeStats, setShowHomeStats] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [personalDetailsExpanded, setPersonalDetailsExpanded] = useState(true);
+  const [preferencesExpanded, setPreferencesExpanded] = useState(true);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   useEffect(() => {
     if (session?.user) {
@@ -53,13 +67,19 @@ export default function ProfileScreen() {
         setDisplayName(data.display_name || '');
         setPhoneNumber(data.phone_number || '');
         setEmail(data.email || session?.user?.email || '');
-        setDateOfBirth(data.date_of_birth || '');
+        if (data.date_of_birth) {
+          setDateOfBirth(new Date(data.date_of_birth));
+        }
         // Get preferences from metadata
         const metadata = session?.user?.user_metadata;
         setShowHomeStats(metadata?.show_home_stats !== false);
       } else {
         setEmail(session?.user?.email || '');
       }
+      
+      // Load biometric preference
+      const biometricPref = await AsyncStorage.getItem('biometric_enabled');
+      setBiometricEnabled(biometricPref === 'true');
     } catch (error: any) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -67,7 +87,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const calculateAge = (dob: string): number | null => {
+  const calculateAge = (dob: Date | null): number | null => {
     if (!dob) return null;
     const birthDate = new Date(dob);
     const today = new Date();
@@ -79,13 +99,73 @@ export default function ProfileScreen() {
     return age;
   };
 
-  const handleSave = async () => {
+  const generateYears = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let year = currentYear; year >= 1900; year--) {
+      years.push(year);
+    }
+    return years;
+  };
+
+  const generateMonths = () => [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const generateDays = () => {
+    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+    const days = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(day);
+    }
+    return days;
+  };
+
+  const handleYearSelect = (year: number) => {
+    setSelectedYear(year);
+    setPickerStep('month');
+  };
+
+  const handleMonthSelect = (month: number) => {
+    setSelectedMonth(month);
+    setPickerStep('day');
+  };
+
+  const handleDaySelect = (day: number) => {
+    setSelectedDay(day);
+    const date = new Date(selectedYear, selectedMonth, day);
+    setDateOfBirth(date);
+    setShowDatePicker(false);
+    setPickerStep('year');
+  };
+
+  const handleOpenDatePicker = () => {
+    if (dateOfBirth) {
+      setSelectedYear(dateOfBirth.getFullYear());
+      setSelectedMonth(dateOfBirth.getMonth());
+      setSelectedDay(dateOfBirth.getDate());
+    }
+    setPickerStep('year');
+    setShowDatePicker(true);
+  };
+
+  const handleCloseDatePicker = () => {
+    setShowDatePicker(false);
+    setPickerStep('year');
+  };
+
+  const formatDateDisplay = (date: Date | null) => {
+    if (!date) return '';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  const handleSavePersonalDetails = async () => {
     if (!session?.user?.id) return;
 
     // Validate date of birth if provided
     if (dateOfBirth) {
-      const dob = new Date(dateOfBirth);
-      if (isNaN(dob.getTime()) || dob > new Date()) {
+      if (dateOfBirth > new Date()) {
         Alert.alert('Invalid Date', 'Please enter a valid date of birth');
         return;
       }
@@ -106,49 +186,82 @@ export default function ProfileScreen() {
 
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          id: session.user.id,
+        .update({
           display_name: displayName.trim() || null,
           phone_number: phoneNumber.trim() || null,
-          email: email.trim() || session.user.email,
           age: calculatedAge,
-          date_of_birth: dateOfBirth || null,
-          role: 'Resident',
-          updated_at: new Date().toISOString(),
-        });
+          date_of_birth: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : null,
+        })
+        .eq('id', session.user.id);
 
       if (error) throw error;
 
-      // Also update user metadata with preferences
+      // Also update user metadata
       await supabase.auth.updateUser({
         data: {
           full_name: displayName.trim() || null,
-          date_of_birth: dateOfBirth || null,
-          show_home_stats: showHomeStats,
+          date_of_birth: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : null,
         }
       });
 
-      Alert.alert('Success', 'Profile updated successfully');
+      Alert.alert('Success', 'Personal details updated successfully');
     } catch (error: any) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to save profile');
+      Alert.alert('Error', 'Failed to save personal details');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSavePreferences = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      setSavingPreferences(true);
+
+      // Update user metadata with preferences
+      await supabase.auth.updateUser({
+        data: {
+          show_home_stats: showHomeStats,
+        }
+      });
+
+      // Save biometric preference
+      await AsyncStorage.setItem('biometric_enabled', biometricEnabled.toString());
+      
+      // If biometric is being disabled, clear saved credentials from secure storage
+      if (!biometricEnabled) {
+        await SecureStore.deleteItemAsync('biometric_email');
+        await SecureStore.deleteItemAsync('biometric_password');
+      }
+
+      Alert.alert('Success', 'Preferences updated successfully');
+    } catch (error: any) {
+      console.error('Error saving preferences:', error);
+      Alert.alert('Error', 'Failed to save preferences');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
+  const handleLogout = () => {
+    // Different message for guest vs authenticated users
+    const title = isAnonymous ? '⚠️ Logout as Guest' : 'Logout';
+    const message = isAnonymous 
+      ? 'Your reports will be permanently lost if you logout. Guest accounts cannot be recovered. Are you sure?'
+      : 'Are you sure you want to logout?';
+    
     Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
+      title,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Sign Out',
+          text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             await supabase.auth.signOut();
-            router.replace('/welcome');
+            router.replace('/screens/LoginScreen');
           },
         },
       ]
@@ -183,9 +296,9 @@ export default function ProfileScreen() {
         {/* Anonymous User Upgrade Prompt */}
         {isAnonymous && (
           <View style={styles.upgradeCard}>
-            <Text style={styles.upgradeTitle}>🔒 Create an Account</Text>
+            <Text style={styles.upgradeTitle}>⚠️ Guest Account</Text>
             <Text style={styles.upgradeText}>
-              You're currently using the app as a guest. Create an account to save your reports permanently and receive updates.
+              You're using a temporary guest account. Your reports will be lost if you logout or close the app. Create an account to save your reports permanently and receive updates.
             </Text>
             <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgradeAccount}>
               <Text style={styles.upgradeButtonText}>Create Account</Text>
@@ -196,99 +309,269 @@ export default function ProfileScreen() {
         {/* Profile Form */}
         {!isAnonymous && (
           <View style={styles.formContainer}>
-            <View style={styles.formSection}>
-              <Text style={styles.label}>Display Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your name"
-                value={displayName}
-                onChangeText={setDisplayName}
-                editable={!saving}
-              />
-            </View>
+            {/* Personal Details Section */}
+            <TouchableOpacity 
+              style={styles.sectionHeader}
+              onPress={() => setPersonalDetailsExpanded(!personalDetailsExpanded)}
+            >
+              <Text style={styles.sectionTitle}>Personal Details</Text>
+              <Text style={styles.expandIcon}>{personalDetailsExpanded ? '▼' : '▶'}</Text>
+            </TouchableOpacity>
 
-            <View style={styles.formSection}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, styles.inputDisabled]}
-                placeholder="Email address"
-                value={email}
-                editable={false}
-              />
-              <Text style={styles.helperText}>Email cannot be changed</Text>
-            </View>
+            {personalDetailsExpanded && (
+              <>
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Display Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your name"
+                    value={displayName}
+                    onChangeText={setDisplayName}
+                    editable={!saving}
+                  />
+                </View>
 
-            <View style={styles.formSection}>
-              <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="09XX XXX XXXX"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                editable={!saving}
-              />
-            </View>
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputDisabled]}
+                    placeholder="Email address"
+                    value={email}
+                    editable={false}
+                  />
+                  <Text style={styles.helperText}>Email cannot be changed</Text>
+                </View>
 
-            <View style={styles.formSection}>
-              <Text style={styles.label}>Date of Birth</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
-                value={dateOfBirth}
-                onChangeText={setDateOfBirth}
-                editable={!saving}
-              />
-              <Text style={styles.helperText}>Format: YYYY-MM-DD (e.g., 1990-01-15)</Text>
-            </View>
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Phone Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="09XX XXX XXXX"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    editable={!saving}
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Date of Birth</Text>
+                  <TouchableOpacity
+                    style={styles.datePickerButton}
+                    onPress={handleOpenDatePicker}
+                    disabled={saving}
+                  >
+                    <Text style={[styles.datePickerText, !dateOfBirth && styles.datePickerPlaceholder]} numberOfLines={1}>
+                      {dateOfBirth ? formatDateDisplay(dateOfBirth) : 'Select Date of Birth'}
+                    </Text>
+                    <Calendar size={20} color={Colors.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.saveButton, saving && styles.buttonDisabled]}
+                  onPress={handleSavePersonalDetails}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Personal Details</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Date Picker Modal */}
+            <Modal
+              visible={showDatePicker}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={handleCloseDatePicker}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalTitleContainer}>
+                      <Text style={styles.modalTitle}>
+                        {pickerStep === 'year' && '📅 Select Year'}
+                        {pickerStep === 'month' && '📆 Select Month'}
+                        {pickerStep === 'day' && '📍 Select Day'}
+                      </Text>
+                      <Text style={styles.modalSubtitle}>
+                        {pickerStep === 'year' && 'Choose your birth year'}
+                        {pickerStep === 'month' && `Year: ${selectedYear}`}
+                        {pickerStep === 'day' && `${generateMonths()[selectedMonth]} ${selectedYear}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={handleCloseDatePicker} style={styles.closeButton}>
+                      <Text style={styles.modalClose}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.progressContainer}>
+                    <TouchableOpacity 
+                      style={[styles.progressDot, pickerStep === 'year' && styles.progressDotActive]}
+                      onPress={() => setPickerStep('year')}
+                    >
+                      <Text style={styles.progressLabel}>Y</Text>
+                    </TouchableOpacity>
+                    <View style={[styles.progressLine, (pickerStep === 'month' || pickerStep === 'day') && styles.progressLineActive]} />
+                    <TouchableOpacity 
+                      style={[styles.progressDot, (pickerStep === 'month' || pickerStep === 'day') && styles.progressDotActive]}
+                      onPress={() => setPickerStep('month')}
+                    >
+                      <Text style={styles.progressLabel}>M</Text>
+                    </TouchableOpacity>
+                    <View style={[styles.progressLine, pickerStep === 'day' && styles.progressLineActive]} />
+                    <TouchableOpacity 
+                      style={[styles.progressDot, pickerStep === 'day' && styles.progressDotActive]}
+                      onPress={() => setPickerStep('day')}
+                    >
+                      <Text style={styles.progressLabel}>D</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.pickerContainer}>
+                    {pickerStep === 'year' && (
+                      <FlatList
+                        data={generateYears()}
+                        keyExtractor={(item) => item.toString()}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={[styles.pickerItem, selectedYear === item && styles.pickerItemSelected]}
+                            onPress={() => handleYearSelect(item)}
+                          >
+                            <Text style={[styles.pickerItemText, selectedYear === item && styles.pickerItemTextSelected]}>
+                              {item}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        showsVerticalScrollIndicator={true}
+                        style={styles.pickerList}
+                      />
+                    )}
+
+                    {pickerStep === 'month' && (
+                      <FlatList
+                        data={generateMonths()}
+                        keyExtractor={(item, index) => index.toString()}
+                        renderItem={({ item, index }) => (
+                          <TouchableOpacity
+                            style={[styles.pickerItem, selectedMonth === index && styles.pickerItemSelected]}
+                            onPress={() => handleMonthSelect(index)}
+                          >
+                            <Text style={[styles.pickerItemText, selectedMonth === index && styles.pickerItemTextSelected]}>
+                              {item}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        showsVerticalScrollIndicator={true}
+                        style={styles.pickerList}
+                      />
+                    )}
+
+                    {pickerStep === 'day' && (
+                      <FlatList
+                        data={generateDays()}
+                        keyExtractor={(item) => item.toString()}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={[styles.pickerItem, selectedDay === item && styles.pickerItemSelected]}
+                            onPress={() => handleDaySelect(item)}
+                          >
+                            <Text style={[styles.pickerItemText, selectedDay === item && styles.pickerItemTextSelected]}>
+                              {item}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        showsVerticalScrollIndicator={true}
+                        style={styles.pickerList}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.helperTextContainer}>
+                    <Text style={styles.pickerHelperText}>
+                      {pickerStep === 'year' && 'Scroll to find your birth year'}
+                      {pickerStep === 'month' && 'Select the month you were born'}
+                      {pickerStep === 'day' && 'Select the day you were born'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </Modal>
 
             <View style={styles.divider} />
 
             {/* Preferences Section */}
-            <Text style={styles.sectionTitle}>Preferences</Text>
-            
-            <View style={styles.preferenceRow}>
-              <View style={styles.preferenceInfo}>
-                <Text style={styles.preferenceLabel}>Notifications</Text>
-                <Text style={styles.preferenceDescription}>Receive updates about your reports</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.toggle, notificationsEnabled && styles.toggleActive]}
-                onPress={() => setNotificationsEnabled(!notificationsEnabled)}
-              >
-                <View style={[styles.toggleThumb, notificationsEnabled && styles.toggleThumbActive]} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.preferenceRow}>
-              <View style={styles.preferenceInfo}>
-                <Text style={styles.preferenceLabel}>Show Statistics</Text>
-                <Text style={styles.preferenceDescription}>Display public stats on home screen</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.toggle, showHomeStats && styles.toggleActive]}
-                onPress={() => setShowHomeStats(!showHomeStats)}
-              >
-                <View style={[styles.toggleThumb, showHomeStats && styles.toggleThumbActive]} />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.buttonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
+            <TouchableOpacity 
+              style={styles.sectionHeader}
+              onPress={() => setPreferencesExpanded(!preferencesExpanded)}
             >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              )}
+              <Text style={styles.sectionTitle}>Preferences</Text>
+              <Text style={styles.expandIcon}>{preferencesExpanded ? '▼' : '▶'}</Text>
             </TouchableOpacity>
+
+            {preferencesExpanded && (
+              <>
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Biometric Login</Text>
+                    <Text style={styles.preferenceDescription}>Save credentials for biometric login. Login normally once after enabling.</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.toggle, biometricEnabled && styles.toggleActive]}
+                    onPress={() => setBiometricEnabled(!biometricEnabled)}
+                  >
+                    <View style={[styles.toggleThumb, biometricEnabled && styles.toggleThumbActive]} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Notifications</Text>
+                    <Text style={styles.preferenceDescription}>Receive updates about your reports</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.toggle, notificationsEnabled && styles.toggleActive]}
+                    onPress={() => setNotificationsEnabled(!notificationsEnabled)}
+                  >
+                    <View style={[styles.toggleThumb, notificationsEnabled && styles.toggleThumbActive]} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Show Statistics</Text>
+                    <Text style={styles.preferenceDescription}>Display public stats on home screen</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.toggle, showHomeStats && styles.toggleActive]}
+                    onPress={() => setShowHomeStats(!showHomeStats)}
+                  >
+                    <View style={[styles.toggleThumb, showHomeStats && styles.toggleThumbActive]} />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.saveButton, savingPreferences && styles.buttonDisabled]}
+                  onPress={handleSavePreferences}
+                  disabled={savingPreferences}
+                >
+                  {savingPreferences ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Preferences</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 
         {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <TouchableOpacity style={styles.signOutButton} onPress={handleLogout}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
@@ -445,11 +728,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     marginVertical: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text.primary,
-    marginBottom: 16,
+  },
+  expandIcon: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    fontWeight: 'bold',
   },
   preferenceRow: {
     flexDirection: 'row',
@@ -500,5 +794,150 @@ const styles = StyleSheet.create({
   },
   toggleThumbActive: {
     transform: [{ translateX: 22 }],
+  },
+  datePickerButton: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: Colors.text.primary,
+    flex: 1,
+    marginRight: 8,
+  },
+  datePickerPlaceholder: {
+    color: Colors.text.secondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 24,
+    paddingBottom: 16,
+  },
+  modalTitleContainer: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginTop: 4,
+  },
+  closeButton: {
+    padding: 4,
+    marginLeft: 12,
+  },
+  modalClose: {
+    fontSize: 28,
+    color: Colors.text.secondary,
+    fontWeight: '300',
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 20,
+  },
+  progressDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressDotActive: {
+    backgroundColor: Colors.primary,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: Colors.white,
+  },
+  progressLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: Colors.secondary,
+    marginHorizontal: 8,
+  },
+  progressLineActive: {
+    backgroundColor: Colors.primary,
+  },
+  pickerContainer: {
+    backgroundColor: '#F8F9FA',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    height: 250,
+  },
+  pickerList: {
+    flex: 1,
+  },
+  pickerItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  pickerItemSelected: {
+    backgroundColor: Colors.primary,
+  },
+  pickerItemText: {
+    fontSize: 18,
+    color: Colors.text.primary,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  pickerItemTextSelected: {
+    color: Colors.white,
+    fontWeight: 'bold',
+  },
+  helperTextContainer: {
+    padding: 20,
+    paddingTop: 16,
+    alignItems: 'center',
+  },
+  pickerHelperText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
 });

@@ -9,6 +9,10 @@ node_modules/
 dist/
 build/
 
+# Native folders (EAS Build generates these)
+/android
+/ios
+
 # IDE and editor files
 .vscode/
 .idea/

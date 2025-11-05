@@ -9,8 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-// Temporarily disabled until development build
-// import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../../lib/geocoding';
 
@@ -113,19 +112,43 @@ const LocationCard: React.FC<LocationCardProps> = ({
 
       {expanded && (
         <View style={styles.mapContainer}>
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapPlaceholderTitle}>🗺️ Map View</Text>
-            <Text style={styles.mapPlaceholderText}>
-              Interactive map will be available after running:
-            </Text>
-            <Text style={styles.mapPlaceholderCode}>npx expo run:android</Text>
-            <Text style={styles.mapPlaceholderText}>
-              Current coordinates:
-            </Text>
-            <Text style={styles.mapPlaceholderCoords}>
-              {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-            </Text>
-          </View>
+          <MapView
+            style={styles.map}
+            provider={PROVIDER_DEFAULT}
+            initialRegion={{
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }}
+            onPress={editable ? handleMapPress : undefined}
+            scrollEnabled={editable}
+            zoomEnabled={true}
+            pitchEnabled={false}
+            rotateEnabled={false}
+          >
+            {/* Using OSM France HOT tile server for compliance with OSM tile usage policy
+                - Designed for humanitarian/emergency apps (perfect for incident reporting)
+                - More permissive than main OSM tiles for mobile apps
+                - No User-Agent header issues
+                - See: https://wiki.openstreetmap.org/wiki/Tile_usage_policy */}
+            <UrlTile
+              urlTemplate="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+              maximumZ={19}
+              flipY={false}
+              tileSize={256}
+            />
+            <Marker
+              coordinate={{
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              }}
+              title={editable ? 'Tap map to change' : 'Location'}
+              description={address}
+              draggable={editable}
+              onDragEnd={editable ? handleMapPress : undefined}
+            />
+          </MapView>
         </View>
       )}
     </View>

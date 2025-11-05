@@ -1,18 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { User2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
 import { router } from 'expo-router';
+import { supabase } from '../lib/supabase';
 
 export default function AppHeader() {
   const { session, isAnonymous } = useAuth();
   const insets = useSafeAreaInsets();
+  const [displayName, setDisplayName] = useState<string>('');
 
   const user = session?.user;
-  const displayName = user?.email || `Guest #${user?.id?.slice(-6).toUpperCase() || '89FA5FDB'}`;
   const isGuest = isAnonymous || !user;
+
+  useEffect(() => {
+    if (user && !isAnonymous) {
+      fetchDisplayName();
+    } else if (user) {
+      setDisplayName(`Guest #${user.id?.slice(-6).toUpperCase() || '89FA5FDB'}`);
+    } else {
+      setDisplayName('Guest');
+    }
+  }, [user, isAnonymous]);
+
+  const fetchDisplayName = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', user?.id)
+        .single();
+
+      if (error) throw error;
+      
+      if (data?.display_name) {
+        setDisplayName(data.display_name);
+      } else {
+        // Fallback to email if no display name
+        setDisplayName(user?.email || 'User');
+      }
+    } catch (error) {
+      console.error('Error fetching display name:', error);
+      setDisplayName(user?.email || 'User');
+    }
+  };
 
   const handleProfilePress = () => {
     router.push('/(tabs)/profile');

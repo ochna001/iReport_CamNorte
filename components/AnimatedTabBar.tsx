@@ -1,5 +1,4 @@
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import * as Haptics from 'expo-haptics';
 import { ClipboardList, Home, User2 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -104,7 +103,6 @@ export default function AnimatedTabBar({ state, descriptors, navigation }: Botto
             });
 
             if (!isFocused && !event.defaultPrevented) {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               navigation.navigate(route.name);
             }
           };

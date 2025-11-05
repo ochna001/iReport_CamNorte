@@ -198,13 +198,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text.secondary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   trackingNumber: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: Colors.primary,
     marginBottom: 8,
     fontFamily: 'monospace',
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   trackingHint: {
     fontSize: 12,

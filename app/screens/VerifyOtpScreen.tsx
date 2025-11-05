@@ -15,6 +15,7 @@ import {
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const VerifyOtpScreen = () => {
   const router = useRouter();
@@ -141,6 +142,16 @@ const VerifyOtpScreen = () => {
 
     // Step 2: Update user metadata and create profile
     if (data.user) {
+      // Calculate age from date of birth
+      let age = null;
+      if (dateOfBirth) {
+        const dob = new Date(dateOfBirth);
+        const today = new Date();
+        const calculatedAge = today.getFullYear() - dob.getFullYear();
+        const monthDiff = today.getMonth() - dob.getMonth();
+        age = monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate()) ? calculatedAge - 1 : calculatedAge;
+      }
+
       // Update user metadata with name and DOB
       const { error: updateError } = await supabase.auth.updateUser({
         data: {
@@ -153,20 +164,59 @@ const VerifyOtpScreen = () => {
         console.error('Metadata update error:', updateError);
       }
 
-      // Create profile
-      const { error: profileError } = await supabase.from('profiles').insert({
+      // Link guest reports to new account
+      const guestSessionId = await AsyncStorage.getItem('@guest_session_id');
+      if (guestSessionId) {
+        console.log('Linking guest reports from:', guestSessionId, 'to new user:', data.user.id);
+        // Update all incidents created by guest to link to new user
+        const { error: linkError } = await supabase
+          .from('incidents')
+          .update({ reporter_id: data.user.id })
+          .eq('reporter_id', guestSessionId);
+        
+        if (linkError) {
+          console.error('Error linking guest reports:', linkError);
+        } else {
+          console.log('Successfully linked guest reports to new account');
+          // Clear guest session after linking
+          await AsyncStorage.removeItem('@guest_session_id');
+        }
+      }
+
+      // Create or update profile
+      // First try to insert, if it fails due to existing profile, update it
+      const { error: insertError } = await supabase.from('profiles').insert({
         id: data.user.id,
         display_name: displayName || 'User',
         email: email,
         role: 'Resident',
         phone_number: phoneNumber || '',
+        age: age,
         date_of_birth: dateOfBirth || null,
       });
 
-      if (profileError) {
-        setLoading(false);
-        Alert.alert('Profile Creation Failed', profileError.message);
-        return;
+      // If insert failed (profile might already exist from trigger), try updating
+      if (insertError) {
+        console.log('Profile insert failed, attempting update:', insertError);
+        const { error: updateProfileError } = await supabase
+          .from('profiles')
+          .update({
+            display_name: displayName || 'User',
+            phone_number: phoneNumber || '',
+            age: age,
+            date_of_birth: dateOfBirth || null,
+          })
+          .eq('id', data.user.id);
+
+        if (updateProfileError) {
+          setLoading(false);
+          console.error('Profile update error:', updateProfileError);
+          Alert.alert(
+            'Profile Update Failed', 
+            'An error occurred while updating your profile. However, your account was created successfully. You can update your profile later from the settings.'
+          );
+          // Don't return here - allow user to continue
+        }
       }
     }
 
