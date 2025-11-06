@@ -23,11 +23,6 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": ""
-        }
-      },
       "jsEngine": "hermes"
     },
     "web": {
