@@ -1,8 +1,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import { Calendar, Eye, EyeOff, CheckSquare, Square } from 'lucide-react-native';
-import { Linking } from 'react-native';
 import React, { useEffect, useState } from 'react';
+import { Calendar, CheckSquare, Eye, EyeOff, Square } from 'lucide-react-native';
 import {
   ActivityIndicator,
   Alert,
@@ -469,8 +468,11 @@ const SignUpScreen = () => {
           <View style={styles.agreementContainer}>
             <TouchableOpacity
               style={styles.checkboxRow}
-              onPress={() => setAgreedToTerms(!agreedToTerms)}
-              disabled={loading}
+              onPress={() => {
+                const newValue = !agreedToTerms;
+                setAgreedToTerms(newValue);
+                setAgreedToPrivacy(newValue);
+              }}
             >
               {agreedToTerms ? (
                 <CheckSquare size={24} color={Colors.primary} />
@@ -482,30 +484,14 @@ const SignUpScreen = () => {
                   I agree to the{' '}
                   <Text
                     style={styles.linkText}
-                    onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/TERMS_OF_SERVICE.md')}
+                    onPress={() => router.push('/screens/TermsOfServiceScreen' as any)}
                   >
                     Terms of Service
                   </Text>
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => setAgreedToPrivacy(!agreedToPrivacy)}
-              disabled={loading}
-            >
-              {agreedToPrivacy ? (
-                <CheckSquare size={24} color={Colors.primary} />
-              ) : (
-                <Square size={24} color={Colors.text.secondary} />
-              )}
-              <View style={styles.checkboxTextContainer}>
-                <Text style={styles.checkboxText}>
-                  I agree to the{' '}
+                  {' '}and{' '}
                   <Text
                     style={styles.linkText}
-                    onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/PRIVACY_POLICY.md')}
+                    onPress={() => router.push('/screens/PrivacyPolicyScreen' as any)}
                   >
                     Privacy Policy
                   </Text>

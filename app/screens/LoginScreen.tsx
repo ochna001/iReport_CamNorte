@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
-import { Eye, EyeOff, Fingerprint, CheckSquare, Square } from 'lucide-react-native';
-import { Linking } from 'react-native';
+import { CheckSquare, Eye, EyeOff, Fingerprint, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,8 +19,8 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
+import { supabase } from '../../lib/supabase';
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -333,7 +332,11 @@ const LoginScreen = () => {
             <View style={styles.agreementContainer}>
               <TouchableOpacity
                 style={styles.checkboxRow}
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
+                onPress={() => {
+                  const newValue = !agreedToTerms;
+                  setAgreedToTerms(newValue);
+                  setAgreedToPrivacy(newValue);
+                }}
               >
                 {agreedToTerms ? (
                   <CheckSquare size={24} color={Colors.primary} />
@@ -345,29 +348,14 @@ const LoginScreen = () => {
                     I agree to the{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/TERMS_OF_SERVICE.md')}
+                      onPress={() => router.push('/screens/TermsOfServiceScreen' as any)}
                     >
                       Terms of Service
                     </Text>
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.checkboxRow}
-                onPress={() => setAgreedToPrivacy(!agreedToPrivacy)}
-              >
-                {agreedToPrivacy ? (
-                  <CheckSquare size={24} color={Colors.primary} />
-                ) : (
-                  <Square size={24} color={Colors.text.secondary} />
-                )}
-                <View style={styles.checkboxTextContainer}>
-                  <Text style={styles.checkboxText}>
-                    I agree to the{' '}
+                    {' '}and{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/PRIVACY_POLICY.md')}
+                      onPress={() => router.push('/screens/PrivacyPolicyScreen' as any)}
                     >
                       Privacy Policy
                     </Text>

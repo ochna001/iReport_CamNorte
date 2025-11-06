@@ -151,7 +151,11 @@ export default function WelcomeScreen() {
             <View style={styles.agreementContainer}>
               <TouchableOpacity
                 style={styles.checkboxRow}
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
+                onPress={() => {
+                  const newValue = !agreedToTerms;
+                  setAgreedToTerms(newValue);
+                  setAgreedToPrivacy(newValue);
+                }}
               >
                 {agreedToTerms ? (
                   <CheckSquare size={24} color={Colors.primary} />
@@ -163,29 +167,14 @@ export default function WelcomeScreen() {
                     I agree to the{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/TERMS_OF_SERVICE.md')}
+                      onPress={() => router.push('/screens/TermsOfServiceScreen' as any)}
                     >
                       Terms of Service
                     </Text>
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.checkboxRow}
-                onPress={() => setAgreedToPrivacy(!agreedToPrivacy)}
-              >
-                {agreedToPrivacy ? (
-                  <CheckSquare size={24} color={Colors.primary} />
-                ) : (
-                  <Square size={24} color="#666" />
-                )}
-                <View style={styles.checkboxTextContainer}>
-                  <Text style={styles.checkboxText}>
-                    I agree to the{' '}
+                    {' '}and{' '}
                     <Text
                       style={styles.linkText}
-                      onPress={() => Linking.openURL('https://github.com/ochna001/iReport_CamNorte/blob/main/PRIVACY_POLICY.md')}
+                      onPress={() => router.push('/screens/PrivacyPolicyScreen' as any)}
                     >
                       Privacy Policy
                     </Text>
