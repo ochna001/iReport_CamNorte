@@ -12,23 +12,61 @@ import {
 import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../../lib/geocoding';
+import { getMapDiagnostics, logMapLoadAttempt, logMapLoadSuccess, logMapLoadFailure, suggestSolution } from '../../lib/mapDiagnostics';
 
-// Error boundary for map crashes
+// Error boundary for map crashes with detailed logging
 class MapErrorBoundary extends Component<
   { children: React.ReactNode; fallback: React.ReactNode },
-  { hasError: boolean }
+  { hasError: boolean; errorDetails: string }
 > {
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, errorDetails: '' };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorDetails: error.toString() };
   }
 
   componentDidCatch(error: any, errorInfo: any) {
-    console.log('Map error caught:', error, errorInfo);
+    // Get diagnostics
+    const diagnostics = getMapDiagnostics();
+    
+    // Detailed error logging
+    const errorLog = {
+      timestamp: new Date().toISOString(),
+      error: error.toString(),
+      errorName: error.name,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      componentStack: errorInfo.componentStack,
+      platform: Platform.OS,
+      platformVersion: Platform.Version,
+      diagnostics,
+    };
+    
+    console.error('═══════════════════════════════════════');
+    console.error('MAP CRASH ERROR LOG');
+    console.error('═══════════════════════════════════════');
+    console.error('Timestamp:', errorLog.timestamp);
+    console.error('Platform:', errorLog.platform);
+    console.error('Platform Version:', errorLog.platformVersion);
+    console.error('Error Name:', errorLog.errorName);
+    console.error('Error Message:', errorLog.errorMessage);
+    console.error('Error Stack:', errorLog.errorStack);
+    console.error('Component Stack:', errorLog.componentStack);
+    console.error('═══════════════════════════════════════');
+    
+    // Suggest solution
+    const solution = suggestSolution(error.message || error.toString());
+    console.error('💡 SUGGESTED SOLUTION:', solution);
+    console.error('═══════════════════════════════════════');
+    
+    // Log to console in JSON format for easy copying
+    console.error('JSON Error Log:', JSON.stringify(errorLog, null, 2));
+    
+    // Log failure
+    logMapLoadFailure(error);
   }
 
   render() {
@@ -62,6 +100,16 @@ const LocationCard: React.FC<LocationCardProps> = ({
       reverseGeocode(location.coords.latitude, location.coords.longitude);
     }
   }, [location]);
+
+  // Log when map is expanded
+  useEffect(() => {
+    if (expanded && location) {
+      logMapLoadAttempt({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+    }
+  }, [expanded, location]);
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
@@ -163,6 +211,10 @@ const LocationCard: React.FC<LocationCardProps> = ({
               zoomEnabled={true}
               pitchEnabled={false}
               rotateEnabled={false}
+              onMapReady={() => {
+                logMapLoadSuccess();
+                console.log('✅ Map rendered successfully');
+              }}
             >
               {/* Using OSM France HOT tile server for compliance with OSM tile usage policy
                   - Designed for humanitarian/emergency apps (perfect for incident reporting)
