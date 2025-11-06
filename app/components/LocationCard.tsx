@@ -98,8 +98,12 @@ const LocationCard: React.FC<LocationCardProps> = ({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [showMap, setShowMap] = useState(false);
   
+  // TODO: Set to true once maps are verified working in development build
+  const ENABLE_MAPS_IN_PRODUCTION = false;
+  
   // Check if we're in a development build (has devtools)
   const isDevelopmentBuild = __DEV__ || Constants.appOwnership === 'expo';
+  const shouldShowMap = ENABLE_MAPS_IN_PRODUCTION || isDevelopmentBuild;
 
   useEffect(() => {
     if (location) {
@@ -215,7 +219,7 @@ const LocationCard: React.FC<LocationCardProps> = ({
 
       {expanded && (
         <View style={styles.mapContainer}>
-          {!isDevelopmentBuild ? (
+          {!shouldShowMap ? (
             <View style={styles.mapErrorContainer}>
               <MapPin size={48} color={Colors.primary} />
               <Text style={styles.mapErrorText}>Map view disabled in this build</Text>

@@ -27,7 +27,8 @@
         "googleMaps": {
           "apiKey": ""
         }
-      }
+      },
+      "jsEngine": "hermes"
     },
     "web": {
       "output": "static",
