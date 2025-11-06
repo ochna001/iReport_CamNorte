@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Component } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -12,6 +12,32 @@ import {
 import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../../lib/geocoding';
+
+// Error boundary for map crashes
+class MapErrorBoundary extends Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.log('Map error caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 interface LocationCardProps {
   location: Location.LocationObject | null;
@@ -29,6 +55,7 @@ const LocationCard: React.FC<LocationCardProps> = ({
   const [address, setAddress] = useState<string>('Loading address...');
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mapError, setMapError] = useState(false);
 
   useEffect(() => {
     if (location) {
@@ -112,43 +139,54 @@ const LocationCard: React.FC<LocationCardProps> = ({
 
       {expanded && (
         <View style={styles.mapContainer}>
-          <MapView
-            style={styles.map}
-            provider={PROVIDER_DEFAULT}
-            initialRegion={{
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            }}
-            onPress={editable ? handleMapPress : undefined}
-            scrollEnabled={editable}
-            zoomEnabled={true}
-            pitchEnabled={false}
-            rotateEnabled={false}
+          <MapErrorBoundary
+            fallback={
+              <View style={styles.mapErrorContainer}>
+                <Text style={styles.mapErrorText}>Map temporarily unavailable</Text>
+                <Text style={styles.mapErrorSubtext}>
+                  Location: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
+                </Text>
+              </View>
+            }
           >
-            {/* Using OSM France HOT tile server for compliance with OSM tile usage policy
-                - Designed for humanitarian/emergency apps (perfect for incident reporting)
-                - More permissive than main OSM tiles for mobile apps
-                - No User-Agent header issues
-                - See: https://wiki.openstreetmap.org/wiki/Tile_usage_policy */}
-            <UrlTile
-              urlTemplate="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
-              maximumZ={19}
-              flipY={false}
-              tileSize={256}
-            />
-            <Marker
-              coordinate={{
+            <MapView
+              style={styles.map}
+              provider={PROVIDER_DEFAULT}
+              initialRegion={{
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
               }}
-              title={editable ? 'Tap map to change' : 'Location'}
-              description={address}
-              draggable={editable}
-              onDragEnd={editable ? handleMapPress : undefined}
-            />
-          </MapView>
+              onPress={editable ? handleMapPress : undefined}
+              scrollEnabled={editable}
+              zoomEnabled={true}
+              pitchEnabled={false}
+              rotateEnabled={false}
+            >
+              {/* Using OSM France HOT tile server for compliance with OSM tile usage policy
+                  - Designed for humanitarian/emergency apps (perfect for incident reporting)
+                  - More permissive than main OSM tiles for mobile apps
+                  - No User-Agent header issues
+                  - See: https://wiki.openstreetmap.org/wiki/Tile_usage_policy */}
+              <UrlTile
+                urlTemplate="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+                maximumZ={19}
+                flipY={false}
+                tileSize={256}
+              />
+              <Marker
+                coordinate={{
+                  latitude: location.coords.latitude,
+                  longitude: location.coords.longitude,
+                }}
+                title={editable ? 'Tap map to change' : 'Location'}
+                description={address}
+                draggable={editable}
+                onDragEnd={editable ? handleMapPress : undefined}
+              />
+            </MapView>
+          </MapErrorBoundary>
         </View>
       )}
     </View>
@@ -244,6 +282,25 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 4,
     marginBottom: 12,
+  },
+  mapErrorContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    height: 200,
+  },
+  mapErrorText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 8,
+  },
+  mapErrorSubtext: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    textAlign: 'center',
   },
   mapPlaceholderCoords: {
     fontSize: 14,
