@@ -13,6 +13,7 @@ import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../../lib/geocoding';
 import { getMapDiagnostics, logMapLoadAttempt, logMapLoadSuccess, logMapLoadFailure, suggestSolution } from '../../lib/mapDiagnostics';
+import Constants from 'expo-constants';
 
 // Error boundary for map crashes with detailed logging
 class MapErrorBoundary extends Component<
@@ -94,6 +95,11 @@ const LocationCard: React.FC<LocationCardProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mapError, setMapError] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  
+  // Check if we're in a development build (has devtools)
+  const isDevelopmentBuild = __DEV__ || Constants.appOwnership === 'expo';
 
   useEffect(() => {
     if (location) {
@@ -101,15 +107,37 @@ const LocationCard: React.FC<LocationCardProps> = ({
     }
   }, [location]);
 
-  // Log when map is expanded
+  // Log when map is expanded and delay map rendering
   useEffect(() => {
     if (expanded && location) {
       logMapLoadAttempt({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
+      
+      // Delay map rendering to allow UI to settle
+      const timer = setTimeout(() => {
+        setShowMap(true);
+      }, 300);
+      
+      // Timeout to show error if map doesn't load in 10 seconds
+      const errorTimer = setTimeout(() => {
+        if (!mapLoaded) {
+          console.error('Map failed to load within 10 seconds');
+          setMapError(true);
+        }
+      }, 10000);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(errorTimer);
+      };
+    } else {
+      setShowMap(false);
+      setMapLoaded(false);
+      setMapError(false);
     }
-  }, [expanded, location]);
+  }, [expanded, location, mapLoaded]);
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
@@ -187,17 +215,41 @@ const LocationCard: React.FC<LocationCardProps> = ({
 
       {expanded && (
         <View style={styles.mapContainer}>
-          <MapErrorBoundary
-            fallback={
-              <View style={styles.mapErrorContainer}>
-                <Text style={styles.mapErrorText}>Map temporarily unavailable</Text>
-                <Text style={styles.mapErrorSubtext}>
-                  Location: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-                </Text>
-              </View>
-            }
-          >
-            <MapView
+          {!isDevelopmentBuild ? (
+            <View style={styles.mapErrorContainer}>
+              <MapPin size={48} color={Colors.primary} />
+              <Text style={styles.mapErrorText}>Map view disabled in this build</Text>
+              <Text style={styles.mapErrorSubtext}>
+                Location: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
+              </Text>
+              <Text style={[styles.mapErrorSubtext, { marginTop: 8, fontSize: 11 }]}>
+                Use development build for interactive maps
+              </Text>
+            </View>
+          ) : !showMap ? (
+            <View style={styles.mapLoadingContainer}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.mapLoadingText}>Loading map...</Text>
+            </View>
+          ) : mapError ? (
+            <View style={styles.mapErrorContainer}>
+              <Text style={styles.mapErrorText}>Map temporarily unavailable</Text>
+              <Text style={styles.mapErrorSubtext}>
+                Location: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
+              </Text>
+            </View>
+          ) : (
+            <MapErrorBoundary
+              fallback={
+                <View style={styles.mapErrorContainer}>
+                  <Text style={styles.mapErrorText}>Map temporarily unavailable</Text>
+                  <Text style={styles.mapErrorSubtext}>
+                    Location: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
+                  </Text>
+                </View>
+              }
+            >
+              <MapView
               style={styles.map}
               provider={PROVIDER_DEFAULT}
               initialRegion={{
@@ -212,6 +264,7 @@ const LocationCard: React.FC<LocationCardProps> = ({
               pitchEnabled={false}
               rotateEnabled={false}
               onMapReady={() => {
+                setMapLoaded(true);
                 logMapLoadSuccess();
                 console.log('✅ Map rendered successfully');
               }}
@@ -239,6 +292,7 @@ const LocationCard: React.FC<LocationCardProps> = ({
               />
             </MapView>
           </MapErrorBoundary>
+          )}
         </View>
       )}
     </View>
@@ -353,6 +407,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text.secondary,
     textAlign: 'center',
+  },
+  mapLoadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    height: 200,
+  },
+  mapLoadingText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginTop: 12,
   },
   mapPlaceholderCoords: {
     fontSize: 14,
