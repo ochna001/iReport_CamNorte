@@ -22,14 +22,20 @@
     "production": {
       "autoIncrement": true,
       "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "production-apk": {
+      "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
       }
     },
-    "apk": {
+    "apk-arm64": {
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "gradleCommand": ":app:assembleRelease",
+        "architectures": ["arm64-v8a"]
       }
     }
   },
