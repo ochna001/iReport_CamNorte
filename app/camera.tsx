@@ -16,12 +16,14 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import LocationCard from './components/LocationCard';
+import MediaEditor from './components/MediaEditor';
 
 type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 
 interface MediaItem {
   uri: string;
   type: 'image' | 'video';
+  hasBlur?: boolean;
 }
 
 const CameraScreen = () => {
@@ -33,6 +35,7 @@ const CameraScreen = () => {
   const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   const [checkingLocation, setCheckingLocation] = useState(false);
+  const [editingMediaIndex, setEditingMediaIndex] = useState<number | null>(null);
 
   useEffect(() => {
     requestPermissions();
@@ -306,9 +309,22 @@ const CameraScreen = () => {
                   >
                     <Text style={styles.removeButtonText}>×</Text>
                   </TouchableOpacity>
+                  {item.type === 'image' && (
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => setEditingMediaIndex(index)}
+                    >
+                      <Text style={styles.editButtonText}>✏️</Text>
+                    </TouchableOpacity>
+                  )}
                   {item.type === 'video' && (
                     <View style={styles.videoBadge}>
                       <Text style={styles.videoBadgeText}>VIDEO</Text>
+                    </View>
+                  )}
+                  {item.hasBlur && (
+                    <View style={styles.blurBadge}>
+                      <Text style={styles.blurBadgeText}>🔲</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -352,6 +368,25 @@ const CameraScreen = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Media Editor */}
+      {editingMediaIndex !== null && media[editingMediaIndex] && (
+        <MediaEditor
+          visible={true}
+          imageUri={media[editingMediaIndex].uri}
+          onSave={(editedUri, hasBlur) => {
+            const updatedMedia = [...media];
+            updatedMedia[editingMediaIndex] = {
+              ...updatedMedia[editingMediaIndex],
+              uri: editedUri,
+              hasBlur,
+            };
+            setMedia(updatedMedia);
+            setEditingMediaIndex(null);
+          }}
+          onCancel={() => setEditingMediaIndex(null)}
+        />
+      )}
 
       {/* Media Preview Modal */}
       <Modal
@@ -630,6 +665,34 @@ const styles = StyleSheet.create({
   },
   videoPreviewSubtext: {
     color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+  },
+  editButton: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButtonText: {
+    fontSize: 14,
+  },
+  blurBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(255, 107, 107, 0.9)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blurBadgeText: {
     fontSize: 12,
   },
 });

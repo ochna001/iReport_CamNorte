@@ -2,16 +2,18 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Modal,
     SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { getQueueCount } from '../../lib/offlineQueue';
 import { supabase } from '../../lib/supabase';
 
 interface Stats {
@@ -27,6 +29,20 @@ export default function HomeScreen() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [showStats, setShowStats] = useState(true);
   const [statsMode, setStatsMode] = useState<'community' | 'personal'>('community');
+  const [showQuickReport, setShowQuickReport] = useState(false);
+  const [pendingReports, setPendingReports] = useState(0);
+
+  // Check for pending offline reports
+  useEffect(() => {
+    const checkPending = async () => {
+      const count = await getQueueCount();
+      setPendingReports(count);
+    };
+    checkPending();
+    // Refresh every 5 seconds
+    const interval = setInterval(checkPending, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     // Check user preference
@@ -238,6 +254,86 @@ export default function HomeScreen() {
         </View>
 
       </View>
+
+      {/* Floating Quick Report Button */}
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setShowQuickReport(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.floatingButtonIcon}>🚨</Text>
+        <Text style={styles.floatingButtonText}>Quick Report</Text>
+        {pendingReports > 0 && (
+          <View style={styles.pendingBadge}>
+            <Text style={styles.pendingBadgeText}>{pendingReports}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      {/* Quick Report Modal */}
+      <Modal
+        visible={showQuickReport}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowQuickReport(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>🚨 Quick Report</Text>
+            <Text style={styles.modalSubtitle}>Select emergency type</Text>
+
+            <View style={styles.quickOptions}>
+              <TouchableOpacity
+                style={[styles.quickOption, { backgroundColor: Colors.agencies.pnp }]}
+                onPress={() => {
+                  setShowQuickReport(false);
+                  handleReportPress('PNP');
+                }}
+              >
+                <Text style={styles.quickOptionIcon}>🚔</Text>
+                <Text style={styles.quickOptionText}>Crime</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickOption, { backgroundColor: Colors.agencies.bfp }]}
+                onPress={() => {
+                  setShowQuickReport(false);
+                  handleReportPress('BFP');
+                }}
+              >
+                <Text style={styles.quickOptionIcon}>🔥</Text>
+                <Text style={styles.quickOptionText}>Fire</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickOption, { backgroundColor: Colors.agencies.pdrrmo }]}
+                onPress={() => {
+                  setShowQuickReport(false);
+                  handleReportPress('PDRRMO');
+                }}
+              >
+                <Text style={styles.quickOptionIcon}>🌊</Text>
+                <Text style={styles.quickOptionText}>Disaster</Text>
+              </TouchableOpacity>
+            </View>
+
+            {pendingReports > 0 && (
+              <View style={styles.pendingInfo}>
+                <Text style={styles.pendingInfoText}>
+                  📤 {pendingReports} report{pendingReports > 1 ? 's' : ''} pending sync
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowQuickReport(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -392,5 +488,118 @@ const styles = StyleSheet.create({
     width: '100%',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  // Floating button styles
+  floatingButton: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingButtonIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  floatingButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pendingBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fbbf24',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  pendingBadgeText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  quickOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 20,
+  },
+  quickOption: {
+    flex: 1,
+    paddingVertical: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  quickOptionIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  quickOptionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pendingInfo: {
+    backgroundColor: '#FFF3CD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  pendingInfoText: {
+    color: '#856404',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  cancelButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: Colors.text.secondary,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

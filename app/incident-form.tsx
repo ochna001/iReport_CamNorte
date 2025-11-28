@@ -34,6 +34,7 @@ const IncidentFormScreen = () => {
   const [age, setAge] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [residentLocation, setResidentLocation] = useState<Location.LocationObject | null>(null);
   const [incidentLocation, setIncidentLocation] = useState<Location.LocationObject | null>(null);
   const [currentDateTime] = useState(new Date());
@@ -175,6 +176,29 @@ const IncidentFormScreen = () => {
     }
   };
 
+  // Smart tags for quick details
+  const getSmartTags = () => {
+    const commonTags = ['🚨 Urgent', '👥 Multiple People', '🚗 Vehicle Involved', '🏠 Residential', '🏢 Commercial'];
+    switch (agency) {
+      case 'PNP':
+        return [...commonTags, '🔫 Armed', '🏃 Suspect Fleeing', '🚔 Police Needed', '💊 Drugs', '🍺 Alcohol'];
+      case 'BFP':
+        return [...commonTags, '🔥 Active Fire', '💨 Smoke Only', '⚡ Electrical', '⛽ Gas/Fuel', '🧯 Contained'];
+      case 'PDRRMO':
+        return [...commonTags, '🌊 Flooding', '⛰️ Landslide', '🌪️ Storm', '🏚️ Structural', '🚧 Road Blocked'];
+      default:
+        return commonTags;
+    }
+  };
+
+  const toggleTag = (tag: string) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter(t => t !== tag));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
+    }
+  };
+
   const handleSuggestionPress = (suggestion: string) => {
     setDescription(suggestion);
     setShowSuggestions(false);
@@ -220,6 +244,10 @@ const IncidentFormScreen = () => {
       return;
     }
 
+    // Combine description with selected tags
+    const tagsText = selectedTags.length > 0 ? `\n\nTags: ${selectedTags.join(', ')}` : '';
+    const fullDescription = description + tagsText;
+
     // Navigate to confirmation screen
     console.log('Navigating to confirmation with params:', {
       agency,
@@ -228,7 +256,7 @@ const IncidentFormScreen = () => {
       longitude,
       name,
       age,
-      description,
+      description: fullDescription,
     });
     
     router.push({
@@ -240,7 +268,7 @@ const IncidentFormScreen = () => {
         longitude,
         name,
         age,
-        description,
+        description: fullDescription,
       },
     });
   };
@@ -364,6 +392,35 @@ const IncidentFormScreen = () => {
               numberOfLines={6}
               textAlignVertical="top"
             />
+
+            {/* Smart Tags */}
+            <View style={styles.smartTagsContainer}>
+              <Text style={styles.smartTagsTitle}>🏷️ Quick Tags (tap to add):</Text>
+              <View style={styles.smartTagsGrid}>
+                {getSmartTags().map((tag, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.smartTag,
+                      selectedTags.includes(tag) && { backgroundColor: getAgencyColor(), borderColor: getAgencyColor() }
+                    ]}
+                    onPress={() => toggleTag(tag)}
+                  >
+                    <Text style={[
+                      styles.smartTagText,
+                      selectedTags.includes(tag) && { color: '#fff' }
+                    ]}>
+                      {tag}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {selectedTags.length > 0 && (
+                <Text style={styles.selectedTagsCount}>
+                  {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''} selected
+                </Text>
+              )}
+            </View>
           </View>
 
           {/* Submit Button */}
@@ -523,6 +580,42 @@ const styles = StyleSheet.create({
   suggestionsHelper: {
     fontSize: 12,
     color: Colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  // Smart tags styles
+  smartTagsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  smartTagsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 12,
+  },
+  smartTagsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  smartTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    backgroundColor: Colors.white,
+  },
+  smartTagText: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  selectedTagsCount: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    marginTop: 12,
     fontStyle: 'italic',
   },
 });

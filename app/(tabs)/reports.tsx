@@ -1,21 +1,22 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    RefreshControl,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { getQueue, processQueue, QueuedIncident } from '../../lib/offlineQueue';
 import { supabase } from '../../lib/supabase';
-import AppHeader from '../../components/AppHeader';
 
 interface Incident {
   id: string;
@@ -29,19 +30,66 @@ interface Incident {
 
 export default function ReportsScreen() {
   const router = useRouter();
-  const { session, isAnonymous, deviceId } = useAuth();
+  const { session, isAnonymous, deviceId, isOffline } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'agency'>('date');
+  const [pendingReports, setPendingReports] = useState<QueuedIncident[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchIncidents();
+    fetchPendingReports();
   }, []);
 
   useEffect(() => {
     sortIncidents();
   }, [sortBy]);
+
+  // Fetch pending offline reports
+  const fetchPendingReports = async () => {
+    const queue = await getQueue();
+    setPendingReports(queue);
+  };
+
+  // Manual sync function
+  const handleManualSync = async () => {
+    if (isOffline) {
+      Alert.alert('No Connection', 'Please connect to the internet to sync your reports.');
+      return;
+    }
+
+    if (pendingReports.length === 0) {
+      Alert.alert('No Pending Reports', 'All your reports are already synced.');
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const result = await processQueue(
+        (current, total) => console.log(`Syncing ${current}/${total}`),
+        (id) => console.log(`Successfully synced: ${id}`),
+        (id, error) => console.error(`Failed to sync ${id}:`, error)
+      );
+
+      if (result.successful > 0) {
+        Alert.alert(
+          'Sync Complete',
+          `${result.successful} report${result.successful > 1 ? 's' : ''} synced successfully.${result.failed > 0 ? ` ${result.failed} failed.` : ''}`
+        );
+        fetchIncidents();
+        fetchPendingReports();
+      } else if (result.failed > 0) {
+        Alert.alert('Sync Failed', 'Could not sync reports. Please try again later.');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      Alert.alert('Sync Error', 'An error occurred while syncing.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchIncidents = async () => {
     try {
@@ -216,6 +264,48 @@ export default function ReportsScreen() {
       <StatusBar barStyle="dark-content" />
       
       <AppHeader />
+
+      {/* Pending Reports Section */}
+      {pendingReports.length > 0 && (
+        <View style={styles.pendingSection}>
+          <View style={styles.pendingHeader}>
+            <Text style={styles.pendingTitle}>
+              📤 {pendingReports.length} Pending Report{pendingReports.length > 1 ? 's' : ''}
+            </Text>
+            <TouchableOpacity
+              style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+              onPress={handleManualSync}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.syncButtonText}>Sync Now</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.pendingSubtext}>
+            {isOffline 
+              ? 'Connect to internet to sync these reports'
+              : 'Tap "Sync Now" to upload pending reports'}
+          </Text>
+          {pendingReports.slice(0, 3).map((report, index) => (
+            <View key={report.id} style={styles.pendingItem}>
+              <Text style={styles.pendingItemAgency}>
+                {report.agency === 'PNP' ? '🚔' : report.agency === 'BFP' ? '🔥' : '🌊'} {report.agency}
+              </Text>
+              <Text style={styles.pendingItemDesc} numberOfLines={1}>
+                {report.description}
+              </Text>
+            </View>
+          ))}
+          {pendingReports.length > 3 && (
+            <Text style={styles.pendingMore}>
+              +{pendingReports.length - 3} more pending...
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Anonymous User Prompt */}
       {isAnonymous && (
@@ -487,5 +577,74 @@ const styles = StyleSheet.create({
   },
   sortButtonTextActive: {
     color: '#fff',
+  },
+  // Pending reports styles
+  pendingSection: {
+    backgroundColor: '#FFF3CD',
+    margin: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE69C',
+  },
+  pendingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pendingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#856404',
+  },
+  syncButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  syncButtonDisabled: {
+    opacity: 0.7,
+  },
+  syncButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pendingSubtext: {
+    fontSize: 12,
+    color: '#856404',
+    marginBottom: 12,
+  },
+  pendingItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingItemAgency: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#856404',
+    marginRight: 8,
+    minWidth: 50,
+  },
+  pendingItemDesc: {
+    flex: 1,
+    fontSize: 12,
+    color: '#856404',
+  },
+  pendingMore: {
+    fontSize: 12,
+    color: '#856404',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });

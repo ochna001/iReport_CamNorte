@@ -1,13 +1,32 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Redirect } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '../contexts/AuthProvider';
+import { ONBOARDING_KEY } from './onboarding';
 
 export default function Index() {
   const { session, loading, isGuestMode, isOffline } = useAuth();
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
 
-  // Show loading spinner while checking auth status
-  if (loading) {
+  useEffect(() => {
+    checkOnboardingStatus();
+  }, []);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      const completed = await AsyncStorage.getItem(ONBOARDING_KEY);
+      setHasCompletedOnboarding(completed === 'true');
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+    } finally {
+      setCheckingOnboarding(false);
+    }
+  };
+
+  // Show loading spinner while checking auth and onboarding status
+  if (loading || checkingOnboarding) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#16a34a" />
@@ -25,7 +44,12 @@ export default function Index() {
     return <Redirect href="/(tabs)" />;
   }
 
-  // If not authenticated and online, redirect to welcome screen
+  // First time user - show onboarding
+  if (!hasCompletedOnboarding) {
+    return <Redirect href="/onboarding" />;
+  }
+
+  // Returning user without session - show welcome screen
   return <Redirect href="/welcome" />;
 }
 
