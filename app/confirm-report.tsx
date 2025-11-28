@@ -1,26 +1,26 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../lib/geocoding';
+import { addToQueue, isOnline } from '../lib/offlineQueue';
 import { supabase } from '../lib/supabase';
-import { isOnline, addToQueue } from '../lib/offlineQueue';
 
 type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 
 const ConfirmReportScreen = () => {
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, isGuestMode, signInAnonymously } = useAuth();
   const { 
     agency, 
     mediaUris, 
@@ -90,6 +90,21 @@ const ConfirmReportScreen = () => {
 
     try {
       setSubmitting(true);
+
+      // If user is in guest mode (no session), create anonymous session now
+      let reporterId = session?.user?.id || null;
+      if (isGuestMode && !session) {
+        try {
+          await signInAnonymously();
+          // Get the new session after anonymous sign-in
+          const { data: { session: newSession } } = await supabase.auth.getSession();
+          reporterId = newSession?.user?.id || null;
+          console.log('Created anonymous session for report submission:', reporterId);
+        } catch (authError) {
+          console.error('Failed to create anonymous session:', authError);
+          // Continue without session - report will be submitted without reporter_id
+        }
+      }
 
       // Check if online
       const online = await isOnline();
@@ -175,7 +190,7 @@ const ConfirmReportScreen = () => {
         .from('incidents')
         .insert({
           agency_type: agency.toLowerCase(),
-          reporter_id: session?.user?.id || null,
+          reporter_id: reporterId,
           reporter_name: name,
           reporter_age: parseInt(age),
           description: description,

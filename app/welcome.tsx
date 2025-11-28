@@ -1,24 +1,24 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
 import { CheckSquare, Square } from 'lucide-react-native';
+import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { signInAnonymously } = useAuth();
+  const { enterGuestMode } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showGuestAgreement, setShowGuestAgreement] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -36,11 +36,13 @@ export default function WelcomeScreen() {
 
     try {
       setLoading(true);
-      await signInAnonymously();
+      // Just enter guest mode - don't create Supabase session yet
+      // Anonymous session will be created when they actually submit a report
+      await enterGuestMode();
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', 'Failed to continue as guest. Please try again.');
-      console.error('Guest sign-in error:', error);
+      console.error('Guest mode error:', error);
     } finally {
       setLoading(false);
       setShowGuestAgreement(false);

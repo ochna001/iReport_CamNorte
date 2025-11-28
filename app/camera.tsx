@@ -4,18 +4,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Camera } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import LocationCard from './components/LocationCard';
 import { Colors } from '../constants/colors';
+import LocationCard from './components/LocationCard';
 
 type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 
@@ -31,13 +31,31 @@ const CameraScreen = () => {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const [checkingLocation, setCheckingLocation] = useState(false);
 
   useEffect(() => {
     requestPermissions();
-    getCurrentLocation();
     // Auto-open camera when screen loads
     handleTakePhoto();
   }, []);
+
+  // Auto-refresh location when permission changes or screen is focused
+  useEffect(() => {
+    const checkLocationPeriodically = async () => {
+      if (!location && !checkingLocation) {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          setLocationPermissionDenied(false);
+          getCurrentLocation();
+        }
+      }
+    };
+
+    // Check every 2 seconds if location is not available
+    const interval = setInterval(checkLocationPeriodically, 2000);
+    return () => clearInterval(interval);
+  }, [location, checkingLocation]);
 
   const requestPermissions = async () => {
     // Request camera permission
@@ -49,18 +67,66 @@ const CameraScreen = () => {
     // Request location permission
     const locationStatus = await Location.requestForegroundPermissionsAsync();
     if (locationStatus.status !== 'granted') {
-      Alert.alert('Permission Required', 'Location permission is required to tag incident location.');
+      setLocationPermissionDenied(true);
+      Alert.alert(
+        'Location Required',
+        'Location permission is required to tag the incident location. Please enable location access in your device settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Open Settings', 
+            onPress: () => {
+              // This will prompt user to go to settings
+              Location.requestForegroundPermissionsAsync();
+            }
+          },
+        ]
+      );
+    } else {
+      setLocationPermissionDenied(false);
+      getCurrentLocation();
     }
   };
 
   const getCurrentLocation = async () => {
+    if (checkingLocation) return;
+    
     try {
+      setCheckingLocation(true);
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
       setLocation(loc);
+      setLocationPermissionDenied(false);
     } catch (error) {
       console.error('Error getting location:', error);
+      // Check if it's a permission error
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationPermissionDenied(true);
+      }
+    } finally {
+      setCheckingLocation(false);
+    }
+  };
+
+  const handleRetryLocation = async () => {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      // Request permission again
+      const newStatus = await Location.requestForegroundPermissionsAsync();
+      if (newStatus.status === 'granted') {
+        setLocationPermissionDenied(false);
+        getCurrentLocation();
+      } else {
+        Alert.alert(
+          'Location Required',
+          'Please enable location access in your device settings to continue.',
+          [{ text: 'OK' }]
+        );
+      }
+    } else {
+      getCurrentLocation();
     }
   };
 
@@ -128,6 +194,19 @@ const CameraScreen = () => {
       return;
     }
 
+    // Check if location is available
+    if (!location) {
+      Alert.alert(
+        'Location Required',
+        'Location is required to submit a report. Please enable location access.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Enable Location', onPress: handleRetryLocation },
+        ]
+      );
+      return;
+    }
+
     // Navigate to incident form with media and location
     router.push({
       pathname: '/incident-form',
@@ -179,7 +258,25 @@ const CameraScreen = () => {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {/* Location Info */}
-        <LocationCard location={location} title="📍 Incident Location" />
+        {locationPermissionDenied ? (
+          <View style={styles.locationDeniedCard}>
+            <Text style={styles.locationDeniedTitle}>📍 Location Required</Text>
+            <Text style={styles.locationDeniedText}>
+              Location permission is required to tag the incident location. 
+              Please enable location access to continue.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.retryButton, { backgroundColor: getAgencyColor() }]}
+              onPress={handleRetryLocation}
+            >
+              <Text style={styles.retryButtonText}>
+                {checkingLocation ? 'Checking...' : 'Enable Location'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <LocationCard location={location} title="📍 Incident Location" />
+        )}
 
         {/* Instructions - only show if no media yet */}
         {media.length === 0 && (
@@ -332,6 +429,38 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderLeftWidth: 4,
     borderLeftColor: Colors.primary,
+  },
+  locationDeniedCard: {
+    backgroundColor: '#FFF3CD',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFC107',
+    alignItems: 'center',
+  },
+  locationDeniedTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#856404',
+    marginBottom: 8,
+  },
+  locationDeniedText: {
+    fontSize: 14,
+    color: '#856404',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   locationLabel: {
     fontSize: 14,

@@ -6,17 +6,17 @@ import * as WebBrowser from 'expo-web-browser';
 import { CheckSquare, Eye, EyeOff, Fingerprint, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
@@ -24,7 +24,7 @@ import { supabase } from '../../lib/supabase';
 
 const LoginScreen = () => {
   const router = useRouter();
-  const { signInAnonymously } = useAuth();
+  const { enterGuestMode } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -142,11 +142,13 @@ const LoginScreen = () => {
 
     try {
       setGuestLoading(true);
-      await signInAnonymously();
+      // Just enter guest mode - don't create Supabase session yet
+      // Anonymous session will be created when they actually submit a report
+      await enterGuestMode();
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', 'Failed to continue as guest. Please try again.');
-      console.error('Guest sign-in error:', error);
+      console.error('Guest mode error:', error);
     } finally {
       setGuestLoading(false);
       setShowGuestAgreement(false);

@@ -1,21 +1,21 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
 import { Calendar, CheckSquare, Eye, EyeOff, Square } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -105,7 +105,10 @@ const SignUpScreen = () => {
 
   const handleDaySelect = (day: number) => {
     setSelectedDay(day);
-    const date = new Date(selectedYear, selectedMonth, day);
+    // Create date at noon UTC to avoid timezone issues
+    // Format: YYYY-MM-DD then parse as UTC
+    const dateString = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+    const date = new Date(dateString);
     setDateOfBirth(date);
     setShowDatePicker(false);
     setPickerStep('year'); // Reset for next time
@@ -123,7 +126,11 @@ const SignUpScreen = () => {
 
   const formatDateDisplay = (date: Date | null) => {
     if (!date) return '';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    // Use UTC methods to avoid timezone shifts
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${month}/${day}/${year}`;
   };
 
   const handleSignUp = async () => {

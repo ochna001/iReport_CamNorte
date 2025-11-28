@@ -1,26 +1,26 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
 import { Calendar } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { supabase } from '../../lib/supabase';
-import AppHeader from '../../components/AppHeader';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -91,9 +91,10 @@ export default function ProfileScreen() {
     if (!dob) return null;
     const birthDate = new Date(dob);
     const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    // Use UTC methods for consistent age calculation
+    let age = today.getFullYear() - birthDate.getUTCFullYear();
+    const monthDiff = today.getMonth() - birthDate.getUTCMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getUTCDate())) {
       age--;
     }
     return age;
@@ -134,7 +135,9 @@ export default function ProfileScreen() {
 
   const handleDaySelect = (day: number) => {
     setSelectedDay(day);
-    const date = new Date(selectedYear, selectedMonth, day);
+    // Create date at noon UTC to avoid timezone issues
+    const dateString = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+    const date = new Date(dateString);
     setDateOfBirth(date);
     setShowDatePicker(false);
     setPickerStep('year');
@@ -142,9 +145,10 @@ export default function ProfileScreen() {
 
   const handleOpenDatePicker = () => {
     if (dateOfBirth) {
-      setSelectedYear(dateOfBirth.getFullYear());
-      setSelectedMonth(dateOfBirth.getMonth());
-      setSelectedDay(dateOfBirth.getDate());
+      // Use UTC methods to get correct date values
+      setSelectedYear(dateOfBirth.getUTCFullYear());
+      setSelectedMonth(dateOfBirth.getUTCMonth());
+      setSelectedDay(dateOfBirth.getUTCDate());
     }
     setPickerStep('year');
     setShowDatePicker(true);
@@ -157,7 +161,11 @@ export default function ProfileScreen() {
 
   const formatDateDisplay = (date: Date | null) => {
     if (!date) return '';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    // Use UTC methods to avoid timezone shifts
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${month}/${day}/${year}`;
   };
 
   const handleSavePersonalDetails = async () => {
