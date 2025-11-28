@@ -1,11 +1,14 @@
 /**
- * OpenStreetMap Nominatim Geocoding Utilities
+ * Geocoding Utilities
  * 
- * Provides functions for reverse geocoding using OSM Nominatim API
+ * Provides functions for reverse geocoding using Google Maps Geocoding API
  * and formatting addresses for Philippine locations.
  */
 
-export interface OSMAddress {
+// Google Maps API Key (same as in app.json)
+const GOOGLE_MAPS_API_KEY = 'AIzaSyBuylnOdkYntsIFYVDbsQFemeyqya1TaTc';
+
+export interface GeocodedAddress {
   street: string | null;
   postalCode: string | null;
   streetNumber: string | null;
@@ -21,27 +24,24 @@ export interface OSMAddress {
 }
 
 /**
- * Reverse geocode coordinates using OpenStreetMap Nominatim API
+ * Reverse geocode coordinates using Google Maps Geocoding API
  * 
  * @param latitude - Latitude coordinate
  * @param longitude - Longitude coordinate
- * @returns Promise<OSMAddress> - Formatted address object
+ * @returns Promise<GeocodedAddress> - Formatted address object
  */
-export async function reverseGeocodeWithOSM(
+export async function reverseGeocodeWithGoogle(
   latitude: number,
   longitude: number,
   retries = 2
-): Promise<OSMAddress> {
+): Promise<GeocodedAddress> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
       {
-        headers: {
-          'User-Agent': 'iReport-CamNorte/1.0',
-        },
         signal: controller.signal,
       }
     );
@@ -54,31 +54,46 @@ export async function reverseGeocodeWithOSM(
 
     const data = await response.json();
 
-    // Map OSM response to standardized format
-    const address = data.address || {};
+    if (data.status !== 'OK' || !data.results || data.results.length === 0) {
+      throw new Error(`Geocoding failed: ${data.status}`);
+    }
+
+    // Parse Google's address components
+    const result = data.results[0];
+    const components = result.address_components || [];
+    
+    const getComponent = (type: string): string | null => {
+      const component = components.find((c: any) => c.types.includes(type));
+      return component?.long_name || null;
+    };
+
+    const getShortComponent = (type: string): string | null => {
+      const component = components.find((c: any) => c.types.includes(type));
+      return component?.short_name || null;
+    };
     
     return {
-      street: address.road || null,
-      postalCode: address.postcode || null,
-      streetNumber: address.house_number || null,
-      region: address.state || address.province || null,
-      name: address.hamlet || address.village || address.suburb || address.neighbourhood || data.display_name?.split(',')[0] || null,
-      district: address.municipality || address.county || null,
-      country: address.country || null,
-      isoCountryCode: address.country_code?.toUpperCase() || null,
-      formattedAddress: data.display_name || null,
-      subregion: address.state_district || address.county || null,
+      street: getComponent('route'),
+      postalCode: getComponent('postal_code'),
+      streetNumber: getComponent('street_number'),
+      region: getComponent('administrative_area_level_1'),
+      name: getComponent('sublocality_level_1') || getComponent('neighborhood') || getComponent('locality'),
+      district: getComponent('administrative_area_level_2'),
+      country: getComponent('country'),
+      isoCountryCode: getShortComponent('country'),
+      formattedAddress: result.formatted_address || null,
+      subregion: getComponent('administrative_area_level_3'),
       timezone: null,
-      city: address.city || address.town || address.village || null,
+      city: getComponent('locality') || getComponent('administrative_area_level_2'),
     };
   } catch (err: any) {
-    console.error('OSM Geocoding error:', err);
+    console.error('Google Geocoding error:', err);
     
     // Retry on network errors
     if (retries > 0 && (err.name === 'AbortError' || err.message?.includes('Network request failed'))) {
       console.log(`Retrying geocoding... (${retries} attempts left)`);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-      return reverseGeocodeWithOSM(latitude, longitude, retries - 1);
+      return reverseGeocodeWithGoogle(latitude, longitude, retries - 1);
     }
     
     // Return fallback address instead of throwing
@@ -99,6 +114,9 @@ export async function reverseGeocodeWithOSM(
     };
   }
 }
+
+// Alias for backward compatibility
+export const reverseGeocodeWithOSM = reverseGeocodeWithGoogle;
 
 /**
  * Format OSM address for display in the Philippines
@@ -133,21 +151,24 @@ export function formatPhilippineAddress(formattedAddress: string | null): string
  * Get a short address (just the main location name)
  * Useful for compact displays
  * 
- * @param osmAddress - OSM address object
+ * @param address - Geocoded address object
  * @returns Short address string
  */
-export function getShortAddress(osmAddress: OSMAddress): string {
+export function getShortAddress(address: GeocodedAddress): string {
   const parts = [];
   
   // Add name if it's not a Plus Code
-  if (osmAddress.name && !osmAddress.name.match(/^[A-Z0-9]{4}\+[A-Z0-9]{2,3}$/)) {
-    parts.push(osmAddress.name);
+  if (address.name && !address.name.match(/^[A-Z0-9]{4}\+[A-Z0-9]{2,3}$/)) {
+    parts.push(address.name);
   }
   
   // Add city
-  if (osmAddress.city) {
-    parts.push(osmAddress.city);
+  if (address.city) {
+    parts.push(address.city);
   }
   
   return parts.join(', ') || 'Unknown location';
 }
+
+// Type alias for backward compatibility
+export type OSMAddress = GeocodedAddress;

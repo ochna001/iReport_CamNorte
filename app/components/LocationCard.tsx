@@ -1,19 +1,19 @@
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
-import React, { useEffect, useState, Component } from 'react';
+import React, { Component, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../../lib/geocoding';
-import { getMapDiagnostics, logMapLoadAttempt, logMapLoadSuccess, logMapLoadFailure, suggestSolution } from '../../lib/mapDiagnostics';
-import Constants from 'expo-constants';
+import { getMapDiagnostics, logMapLoadAttempt, logMapLoadFailure, logMapLoadSuccess, suggestSolution } from '../../lib/mapDiagnostics';
 
 // Error boundary for map crashes with detailed logging
 class MapErrorBoundary extends Component<
@@ -255,7 +255,7 @@ const LocationCard: React.FC<LocationCardProps> = ({
             >
               <MapView
               style={styles.map}
-              provider={PROVIDER_DEFAULT}
+              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
               initialRegion={{
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
@@ -270,20 +270,9 @@ const LocationCard: React.FC<LocationCardProps> = ({
               onMapReady={() => {
                 setMapLoaded(true);
                 logMapLoadSuccess();
-                console.log('✅ Map rendered successfully');
+                console.log('✅ Map rendered successfully with Google Maps');
               }}
             >
-              {/* Using OSM France HOT tile server for compliance with OSM tile usage policy
-                  - Designed for humanitarian/emergency apps (perfect for incident reporting)
-                  - More permissive than main OSM tiles for mobile apps
-                  - No User-Agent header issues
-                  - See: https://wiki.openstreetmap.org/wiki/Tile_usage_policy */}
-              <UrlTile
-                urlTemplate="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
-                maximumZ={19}
-                flipY={false}
-                tileSize={256}
-              />
               <Marker
                 coordinate={{
                   latitude: location.coords.latitude,
