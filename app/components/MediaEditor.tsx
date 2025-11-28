@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     Dimensions,
     Image,
     Modal,
+    PanResponder,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Colors } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -15,16 +17,31 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface MediaEditorProps {
   visible: boolean;
   imageUri: string;
-  onSave: (editedUri: string, hasBlur: boolean) => void;
+  onSave: (editedUri: string, hasAnnotations: boolean) => void;
   onCancel: () => void;
 }
 
-interface BlurRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+type PenTool = 'blur' | 'red' | 'yellow' | 'arrow';
+
+interface Stroke {
+  path: string;
+  color: string;
+  strokeWidth: number;
+  tool: PenTool;
 }
+
+interface BlurCircle {
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+const TOOL_COLORS: Record<PenTool, string> = {
+  blur: 'rgba(0, 0, 0, 0.7)',
+  red: '#ef4444',
+  yellow: '#fbbf24',
+  arrow: '#ef4444',
+};
 
 const MediaEditor: React.FC<MediaEditorProps> = ({
   visible,
@@ -32,42 +49,69 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
   onSave,
   onCancel,
 }) => {
-  const [blurRegions, setBlurRegions] = useState<BlurRegion[]>([]);
-  const [isAddingBlur, setIsAddingBlur] = useState(false);
-  const [currentRegion, setCurrentRegion] = useState<BlurRegion | null>(null);
+  const [selectedTool, setSelectedTool] = useState<PenTool>('blur');
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [blurCircles, setBlurCircles] = useState<BlurCircle[]>([]);
+  const [currentPath, setCurrentPath] = useState<string>('');
+  const [brushSize, setBrushSize] = useState(20);
 
-  const handleImagePress = (event: any) => {
-    if (!isAddingBlur) return;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        if (selectedTool === 'blur') {
+          // Add blur circle on tap
+          setBlurCircles([...blurCircles, { cx: locationX, cy: locationY, r: brushSize }]);
+        } else {
+          setCurrentPath(`M${locationX},${locationY}`);
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        if (selectedTool === 'blur') {
+          // Add more blur circles while dragging
+          setBlurCircles(prev => [...prev, { cx: locationX, cy: locationY, r: brushSize }]);
+        } else {
+          setCurrentPath(prev => `${prev} L${locationX},${locationY}`);
+        }
+      },
+      onPanResponderRelease: () => {
+        if (selectedTool !== 'blur' && currentPath) {
+          setStrokes([...strokes, {
+            path: currentPath,
+            color: TOOL_COLORS[selectedTool],
+            strokeWidth: selectedTool === 'arrow' ? 4 : brushSize,
+            tool: selectedTool,
+          }]);
+          setCurrentPath('');
+        }
+      },
+    })
+  ).current;
 
-    const { locationX, locationY } = event.nativeEvent;
-    
-    // Add a blur region at tap location
-    const newRegion: BlurRegion = {
-      x: locationX - 40,
-      y: locationY - 40,
-      width: 80,
-      height: 80,
-    };
-    
-    setBlurRegions([...blurRegions, newRegion]);
-    setIsAddingBlur(false);
-  };
-
-  const removeLastBlur = () => {
-    if (blurRegions.length > 0) {
-      setBlurRegions(blurRegions.slice(0, -1));
+  const undo = () => {
+    if (selectedTool === 'blur' && blurCircles.length > 0) {
+      // Remove last 10 blur circles (approximate one stroke)
+      setBlurCircles(prev => prev.slice(0, Math.max(0, prev.length - 10)));
+    } else if (strokes.length > 0) {
+      setStrokes(strokes.slice(0, -1));
     }
   };
 
-  const clearAllBlurs = () => {
-    setBlurRegions([]);
+  const clearAll = () => {
+    setStrokes([]);
+    setBlurCircles([]);
+    setCurrentPath('');
   };
 
   const handleSave = () => {
-    // In a real implementation, we would process the image with blur applied
-    // For now, we'll just pass back the original URI and a flag indicating blur was added
-    onSave(imageUri, blurRegions.length > 0);
+    const hasAnnotations = strokes.length > 0 || blurCircles.length > 0;
+    onSave(imageUri, hasAnnotations);
   };
+
+  const hasContent = strokes.length > 0 || blurCircles.length > 0;
 
   return (
     <Modal
@@ -87,95 +131,144 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Image Container */}
-        <View style={styles.imageContainer}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={handleImagePress}
-            style={styles.imageTouchable}
-          >
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.image}
-              resizeMode="contain"
-            />
-            
-            {/* Blur Overlay Regions */}
-            {blurRegions.map((region, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.blurRegion,
-                  {
-                    left: region.x,
-                    top: region.y,
-                    width: region.width,
-                    height: region.height,
-                  },
-                ]}
-              >
-                <Text style={styles.blurText}>BLUR</Text>
-              </View>
-            ))}
-          </TouchableOpacity>
+        {/* Image Container with Drawing Canvas */}
+        <View style={styles.imageContainer} {...panResponder.panHandlers}>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            resizeMode="contain"
+          />
           
-          {isAddingBlur && (
-            <View style={styles.instructionOverlay}>
-              <Text style={styles.instructionText}>
-                Tap on the area you want to blur (e.g., faces, license plates)
-              </Text>
-            </View>
-          )}
+          {/* SVG Drawing Layer */}
+          <Svg style={styles.svgOverlay}>
+            {/* Blur circles */}
+            {blurCircles.map((circle, index) => (
+              <Circle
+                key={`blur-${index}`}
+                cx={circle.cx}
+                cy={circle.cy}
+                r={circle.r}
+                fill="rgba(0, 0, 0, 0.85)"
+              />
+            ))}
+            
+            {/* Drawn strokes */}
+            {strokes.map((stroke, index) => (
+              <Path
+                key={`stroke-${index}`}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={stroke.strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            
+            {/* Current drawing path */}
+            {currentPath && selectedTool !== 'blur' && (
+              <Path
+                d={currentPath}
+                stroke={TOOL_COLORS[selectedTool]}
+                strokeWidth={selectedTool === 'arrow' ? 4 : brushSize}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </Svg>
         </View>
 
-        {/* Tools */}
+        {/* Pen Tools */}
         <View style={styles.toolsContainer}>
-          <Text style={styles.toolsTitle}>Privacy Tools</Text>
+          <Text style={styles.toolsTitle}>Drawing Tools</Text>
           
+          {/* Tool Selection */}
           <View style={styles.toolsRow}>
             <TouchableOpacity
-              style={[
-                styles.toolButton,
-                isAddingBlur && styles.toolButtonActive,
-              ]}
-              onPress={() => setIsAddingBlur(!isAddingBlur)}
+              style={[styles.toolButton, selectedTool === 'blur' && styles.toolButtonActive]}
+              onPress={() => setSelectedTool('blur')}
             >
-              <Text style={styles.toolIcon}>🔲</Text>
-              <Text style={[
-                styles.toolText,
-                isAddingBlur && styles.toolTextActive,
-              ]}>
-                {isAddingBlur ? 'Tap Image' : 'Add Blur'}
+              <View style={[styles.toolPreview, { backgroundColor: '#333' }]}>
+                <Text style={styles.blurIcon}>◉</Text>
+              </View>
+              <Text style={[styles.toolText, selectedTool === 'blur' && styles.toolTextActive]}>
+                Blur
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.toolButton}
-              onPress={removeLastBlur}
-              disabled={blurRegions.length === 0}
+              style={[styles.toolButton, selectedTool === 'red' && styles.toolButtonActive]}
+              onPress={() => setSelectedTool('red')}
             >
-              <Text style={[styles.toolIcon, blurRegions.length === 0 && styles.toolDisabled]}>↩️</Text>
-              <Text style={[styles.toolText, blurRegions.length === 0 && styles.toolDisabled]}>Undo</Text>
+              <View style={[styles.toolPreview, { backgroundColor: TOOL_COLORS.red }]} />
+              <Text style={[styles.toolText, selectedTool === 'red' && styles.toolTextActive]}>
+                Red Pen
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.toolButton}
-              onPress={clearAllBlurs}
-              disabled={blurRegions.length === 0}
+              style={[styles.toolButton, selectedTool === 'yellow' && styles.toolButtonActive]}
+              onPress={() => setSelectedTool('yellow')}
             >
-              <Text style={[styles.toolIcon, blurRegions.length === 0 && styles.toolDisabled]}>🗑️</Text>
-              <Text style={[styles.toolText, blurRegions.length === 0 && styles.toolDisabled]}>Clear All</Text>
+              <View style={[styles.toolPreview, { backgroundColor: TOOL_COLORS.yellow }]} />
+              <Text style={[styles.toolText, selectedTool === 'yellow' && styles.toolTextActive]}>
+                Highlight
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.toolButton, selectedTool === 'arrow' && styles.toolButtonActive]}
+              onPress={() => setSelectedTool('arrow')}
+            >
+              <View style={styles.toolPreview}>
+                <Text style={styles.arrowIcon}>→</Text>
+              </View>
+              <Text style={[styles.toolText, selectedTool === 'arrow' && styles.toolTextActive]}>
+                Arrow
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {blurRegions.length > 0 && (
-            <Text style={styles.blurCount}>
-              {blurRegions.length} blur region{blurRegions.length > 1 ? 's' : ''} added
-            </Text>
+          {/* Brush Size */}
+          {selectedTool !== 'arrow' && (
+            <View style={styles.sizeRow}>
+              <Text style={styles.sizeLabel}>Size:</Text>
+              {[10, 20, 30, 40].map(size => (
+                <TouchableOpacity
+                  key={size}
+                  style={[styles.sizeButton, brushSize === size && styles.sizeButtonActive]}
+                  onPress={() => setBrushSize(size)}
+                >
+                  <View style={[styles.sizeDot, { width: size / 2, height: size / 2 }]} />
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
 
-          <Text style={styles.privacyNote}>
-            💡 Tip: Blur faces, license plates, or other identifying information to protect privacy.
+          {/* Actions */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, !hasContent && styles.actionButtonDisabled]}
+              onPress={undo}
+              disabled={!hasContent}
+            >
+              <Text style={styles.actionIcon}>↩️</Text>
+              <Text style={[styles.actionText, !hasContent && styles.actionTextDisabled]}>Undo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, !hasContent && styles.actionButtonDisabled]}
+              onPress={clearAll}
+              disabled={!hasContent}
+            >
+              <Text style={styles.actionIcon}>🗑️</Text>
+              <Text style={[styles.actionText, !hasContent && styles.actionTextDisabled]}>Clear All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.hint}>
+            Draw on the image to annotate or blur sensitive areas
           </Text>
         </View>
       </View>
@@ -218,52 +311,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageTouchable: {
+  image: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT * 0.5,
   },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  blurRegion: {
+  svgOverlay: {
     position: 'absolute',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#ff6b6b',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  blurText: {
-    color: '#ff6b6b',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  instructionOverlay: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 12,
-    borderRadius: 8,
-  },
-  instructionText: {
-    color: '#fff',
-    fontSize: 14,
-    textAlign: 'center',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   toolsContainer: {
     backgroundColor: '#1a1a1a',
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
   },
   toolsTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   toolsRow: {
     flexDirection: 'row',
@@ -272,39 +340,100 @@ const styles = StyleSheet.create({
   },
   toolButton: {
     alignItems: 'center',
-    padding: 12,
+    padding: 10,
     borderRadius: 12,
     backgroundColor: '#2a2a2a',
-    minWidth: 80,
+    minWidth: 70,
   },
   toolButtonActive: {
     backgroundColor: Colors.primary,
   },
-  toolIcon: {
-    fontSize: 24,
+  toolPreview: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     marginBottom: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blurIcon: {
+    color: '#888',
+    fontSize: 20,
+  },
+  arrowIcon: {
+    color: TOOL_COLORS.red,
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   toolText: {
-    color: '#fff',
-    fontSize: 12,
+    color: '#aaa',
+    fontSize: 11,
   },
   toolTextActive: {
+    color: '#fff',
     fontWeight: '600',
   },
-  toolDisabled: {
-    opacity: 0.4,
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    gap: 12,
   },
-  blurCount: {
+  sizeLabel: {
     color: '#888',
     fontSize: 12,
-    textAlign: 'center',
+    marginRight: 8,
+  },
+  sizeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2a2a2a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sizeButtonActive: {
+    backgroundColor: '#444',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  sizeDot: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
     marginBottom: 12,
   },
-  privacyNote: {
-    color: '#888',
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
+  },
+  actionIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  actionText: {
+    color: '#fff',
+    fontSize: 13,
+  },
+  actionTextDisabled: {
+    color: '#666',
+  },
+  hint: {
+    color: '#666',
     fontSize: 12,
     textAlign: 'center',
-    lineHeight: 18,
   },
 });
 

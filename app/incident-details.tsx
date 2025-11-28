@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowLeft, Calendar, Clock, FileText } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +16,6 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { supabase } from '../lib/supabase';
-import { ArrowLeft, Calendar, Clock, FileText } from 'lucide-react-native';
 import LocationCard from './components/LocationCard';
 
 interface Incident {
@@ -266,7 +266,7 @@ export default function IncidentDetailsScreen() {
           <Text style={styles.dateText}>{formatDate(incident.created_at)}</Text>
           <View style={styles.timeRow}>
             <Clock size={16} color={Colors.text.secondary} strokeWidth={2} />
-            <Text style={styles.timeText}>{formatTime(incident.created_at)}</Text>
+            <Text style={styles.timeText}>{formatTime(incident.created_at)} </Text>
           </View>
         </View>
 
