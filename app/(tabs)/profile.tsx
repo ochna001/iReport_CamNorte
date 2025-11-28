@@ -8,6 +8,7 @@ import {
     Alert,
     FlatList,
     Modal,
+    RefreshControl,
     SafeAreaView,
     ScrollView,
     StatusBar,
@@ -42,6 +43,7 @@ export default function ProfileScreen() {
   const [personalDetailsExpanded, setPersonalDetailsExpanded] = useState(true);
   const [preferencesExpanded, setPreferencesExpanded] = useState(true);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (session?.user) {
@@ -84,7 +86,13 @@ export default function ProfileScreen() {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchProfile();
   };
 
   const calculateAge = (dob: Date | null): number | null => {
@@ -299,7 +307,16 @@ export default function ProfileScreen() {
       
       <AppHeader />
       
-      <ScrollView>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
+      >
 
         {/* Anonymous User Upgrade Prompt */}
         {isAnonymous && (

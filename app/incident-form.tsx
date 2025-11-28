@@ -178,14 +178,14 @@ const IncidentFormScreen = () => {
 
   // Smart tags for quick details
   const getSmartTags = () => {
-    const commonTags = ['🚨 Urgent', '👥 Multiple People', '🚗 Vehicle Involved', '🏠 Residential', '🏢 Commercial'];
+    const commonTags = ['Urgent', 'Multiple People', 'Vehicle', 'Residential', 'Commercial'];
     switch (agency) {
       case 'PNP':
-        return [...commonTags, '🔫 Armed', '🏃 Suspect Fleeing', '🚔 Police Needed', '💊 Drugs', '🍺 Alcohol'];
+        return [...commonTags, 'Armed', 'Fleeing', 'Drugs', 'Alcohol', 'Weapon'];
       case 'BFP':
-        return [...commonTags, '🔥 Active Fire', '💨 Smoke Only', '⚡ Electrical', '⛽ Gas/Fuel', '🧯 Contained'];
+        return [...commonTags, 'Active Fire', 'Smoke Only', 'Electrical', 'Gas Leak', 'Contained'];
       case 'PDRRMO':
-        return [...commonTags, '🌊 Flooding', '⛰️ Landslide', '🌪️ Storm', '🏚️ Structural', '🚧 Road Blocked'];
+        return [...commonTags, 'Flooding', 'Landslide', 'Storm', 'Structural', 'Road Blocked'];
       default:
         return commonTags;
     }
@@ -598,18 +598,18 @@ const styles = StyleSheet.create({
   smartTagsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   smartTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: Colors.white,
   },
   smartTagText: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.text.secondary,
   },
   selectedTagsCount: {
