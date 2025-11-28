@@ -2,15 +2,15 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
@@ -365,34 +365,6 @@ const IncidentFormScreen = () => {
               textAlignVertical="top"
             />
           </View>
-
-          {/* Agency-Specific Fields */}
-          {agency === 'PNP' && (
-            <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>Crime Details</Text>
-              <Text style={styles.helperText}>
-                Additional fields for crime reports will be added here.
-              </Text>
-            </View>
-          )}
-
-          {agency === 'BFP' && (
-            <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>Fire Details</Text>
-              <Text style={styles.helperText}>
-                Additional fields for fire reports will be added here.
-              </Text>
-            </View>
-          )}
-
-          {agency === 'PDRRMO' && (
-            <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>Disaster Details</Text>
-              <Text style={styles.helperText}>
-                Additional fields for disaster reports will be added here.
-              </Text>
-            </View>
-          )}
 
           {/* Submit Button */}
           <TouchableOpacity

@@ -1,13 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 
@@ -72,10 +72,12 @@ const ReportSuccessScreen = () => {
       {/* Tracking Info */}
       {!isOffline && (
         <View style={styles.trackingCard}>
-          <Text style={styles.trackingLabel}>Tracking Number</Text>
-          <Text style={styles.trackingNumber}>#{incidentId?.substring(0, 8).toUpperCase()}</Text>
+          <Text style={styles.trackingLabel}>Your Tracking Code</Text>
+          <Text style={styles.trackingNumber} selectable>
+            {incidentId?.substring(0, 8).toUpperCase()}
+          </Text>
           <Text style={styles.trackingHint}>
-            Save this number to track your report status
+            Save this code to track your report status
           </Text>
         </View>
       )}
