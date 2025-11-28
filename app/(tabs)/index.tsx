@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
@@ -22,7 +22,7 @@ interface Stats {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, isOffline } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [showStats, setShowStats] = useState(true);
@@ -33,12 +33,18 @@ export default function HomeScreen() {
     const metadata = session?.user?.user_metadata;
     setShowStats(metadata?.show_home_stats !== false);
     
+    // Don't fetch stats if offline
+    if (isOffline) {
+      setLoadingStats(false);
+      return;
+    }
+    
     if (metadata?.show_home_stats !== false) {
       fetchStats();
     } else {
       setLoadingStats(false);
     }
-  }, [session, statsMode]);
+  }, [session, statsMode, isOffline]);
 
   const calculateAvgResponseTime = (incidents: any[]): string => {
     if (!incidents || incidents.length === 0) return 'N/A';
@@ -153,6 +159,15 @@ export default function HomeScreen() {
       
       <AppHeader />
 
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            📡 You're offline - Reports will be saved and synced when connected
+          </Text>
+        </View>
+      )}
+
       <View style={styles.content}>
         {/* Stats Section */}
         {showStats && (
@@ -231,6 +246,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  offlineBanner: {
+    backgroundColor: '#FFF3CD',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE69C',
+  },
+  offlineBannerText: {
+    color: '#856404',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   content: {
     flex: 1,

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
@@ -8,6 +9,7 @@ interface AuthContextType {
   loading: boolean;
   isAnonymous: boolean;
   isGuestMode: boolean;
+  isOffline: boolean;
   deviceId: string | null;
   signInAnonymously: () => Promise<void>;
   enterGuestMode: () => void;
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true, 
   isAnonymous: false,
   isGuestMode: false,
+  isOffline: false,
   deviceId: null,
   signInAnonymously: async () => {},
   enterGuestMode: () => {},
@@ -41,6 +44,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,37 +57,54 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setDeviceId(storedDeviceId);
 
-      // Check for existing session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setSession(session);
-        setIsAnonymous(session.user.is_anonymous || false);
-        
-        // Store guest session ID for report tracking
-        if (session.user.is_anonymous) {
-          await AsyncStorage.setItem(GUEST_SESSION_KEY, session.user.id);
+      // Check network status first
+      const networkState = await NetInfo.fetch();
+      const online = networkState.isConnected && networkState.isInternetReachable;
+      setIsOffline(!online);
+
+      // Check if user was in guest mode (browsing without auth)
+      const wasGuestMode = await AsyncStorage.getItem(GUEST_MODE_KEY);
+      if (wasGuestMode === 'true') {
+        setIsGuestMode(true);
+      }
+
+      if (online) {
+        // Try to get session with timeout
+        try {
+          const sessionPromise = supabase.auth.getSession();
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Session check timeout')), 5000)
+          );
+          
+          const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+          
+          if (session) {
+            setSession(session);
+            setIsAnonymous(session.user.is_anonymous || false);
+            
+            // Store guest session ID for report tracking
+            if (session.user.is_anonymous) {
+              await AsyncStorage.setItem(GUEST_SESSION_KEY, session.user.id);
+            }
+          }
+        } catch (error) {
+          console.log('Session check failed or timed out, continuing offline:', error);
+          setIsOffline(true);
         }
       } else {
-        // Check if user was in guest mode (browsing without auth)
-        const wasGuestMode = await AsyncStorage.getItem(GUEST_MODE_KEY);
-        if (wasGuestMode === 'true') {
-          setIsGuestMode(true);
-        }
-        
-        // Check if we had a previous guest session
-        const previousGuestId = await AsyncStorage.getItem(GUEST_SESSION_KEY);
-        if (previousGuestId) {
-          // Try to restore the guest session by signing in anonymously again
-          // The device_id will be used to link reports
-          console.log('Previous guest session found:', previousGuestId);
-        }
+        console.log('App started offline, skipping session check');
       }
       
       setLoading(false);
     };
 
     initAuth();
+
+    // Listen for network changes
+    const unsubscribeNetwork = NetInfo.addEventListener((state) => {
+      const online = state.isConnected && state.isInternetReachable;
+      setIsOffline(!online);
+    });
 
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -92,6 +113,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     return () => {
+      unsubscribeNetwork();
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -125,7 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, loading, isAnonymous, isGuestMode, deviceId, signInAnonymously, enterGuestMode }}>
+    <AuthContext.Provider value={{ session, loading, isAnonymous, isGuestMode, isOffline, deviceId, signInAnonymously, enterGuestMode }}>
       {children}
     </AuthContext.Provider>
   );
