@@ -4,17 +4,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Camera } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../constants/colors';
+import { useLocation } from '../contexts/LocationProvider';
 import LocationCard from './components/LocationCard';
 import MediaEditor from './components/MediaEditor';
 
@@ -29,13 +30,23 @@ interface MediaItem {
 const CameraScreen = () => {
   const router = useRouter();
   const { agency } = useLocalSearchParams<{ agency: Agency }>();
-  const [media, setMedia] = useState<MediaItem[]>([]);
+  
+  // Use global location from context (fetched on app startup)
+  const { location: globalLocation, loading: locationLoading, permissionDenied, refreshLocation } = useLocation();
+  
+  // Local state for location (can be edited by user)
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
-  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
-  const [checkingLocation, setCheckingLocation] = useState(false);
   const [editingMediaIndex, setEditingMediaIndex] = useState<number | null>(null);
+  
+  // Initialize local location from global location
+  useEffect(() => {
+    if (globalLocation && !location) {
+      setLocation(globalLocation);
+    }
+  }, [globalLocation]);
 
   useEffect(() => {
     requestPermissions();
@@ -43,93 +54,28 @@ const CameraScreen = () => {
     handleTakePhoto();
   }, []);
 
-  // Auto-refresh location when permission changes or screen is focused
-  useEffect(() => {
-    const checkLocationPeriodically = async () => {
-      if (!location && !checkingLocation) {
-        const { status } = await Location.getForegroundPermissionsAsync();
-        if (status === 'granted') {
-          setLocationPermissionDenied(false);
-          getCurrentLocation();
-        }
-      }
-    };
-
-    // Check every 2 seconds if location is not available
-    const interval = setInterval(checkLocationPeriodically, 2000);
-    return () => clearInterval(interval);
-  }, [location, checkingLocation]);
-
   const requestPermissions = async () => {
     // Request camera permission
     const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
     if (cameraStatus.status !== 'granted') {
       Alert.alert('Permission Required', 'Camera permission is required to capture evidence.');
     }
-
-    // Request location permission
-    const locationStatus = await Location.requestForegroundPermissionsAsync();
-    if (locationStatus.status !== 'granted') {
-      setLocationPermissionDenied(true);
-      Alert.alert(
-        'Location Required',
-        'Location permission is required to tag the incident location. Please enable location access in your device settings.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Open Settings', 
-            onPress: () => {
-              // This will prompt user to go to settings
-              Location.requestForegroundPermissionsAsync();
-            }
-          },
-        ]
-      );
-    } else {
-      setLocationPermissionDenied(false);
-      getCurrentLocation();
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    if (checkingLocation) return;
     
-    try {
-      setCheckingLocation(true);
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setLocation(loc);
-      setLocationPermissionDenied(false);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      // Check if it's a permission error
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationPermissionDenied(true);
-      }
-    } finally {
-      setCheckingLocation(false);
+    // Location permission is handled by LocationProvider on app startup
+    // If permission was denied, try to refresh
+    if (permissionDenied) {
+      await refreshLocation();
     }
   };
 
   const handleRetryLocation = async () => {
-    const { status } = await Location.getForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      // Request permission again
-      const newStatus = await Location.requestForegroundPermissionsAsync();
-      if (newStatus.status === 'granted') {
-        setLocationPermissionDenied(false);
-        getCurrentLocation();
-      } else {
-        Alert.alert(
-          'Location Required',
-          'Please enable location access in your device settings to continue.',
-          [{ text: 'OK' }]
-        );
-      }
-    } else {
-      getCurrentLocation();
+    await refreshLocation();
+    if (permissionDenied) {
+      Alert.alert(
+        'Location Required',
+        'Please enable location access in your device settings to continue.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -261,7 +207,7 @@ const CameraScreen = () => {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {/* Location Info */}
-        {locationPermissionDenied ? (
+        {permissionDenied ? (
           <View style={styles.locationDeniedCard}>
             <Text style={styles.locationDeniedTitle}>📍 Location Required</Text>
             <Text style={styles.locationDeniedText}>
@@ -273,12 +219,17 @@ const CameraScreen = () => {
               onPress={handleRetryLocation}
             >
               <Text style={styles.retryButtonText}>
-                {checkingLocation ? 'Checking...' : 'Enable Location'}
+                {locationLoading ? 'Checking...' : 'Enable Location'}
               </Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <LocationCard location={location} title="📍 Incident Location" />
+          <LocationCard 
+            location={location} 
+            title="📍 Confirm Incident Location" 
+            editable={true}
+            onLocationChange={setLocation}
+          />
         )}
 
         {/* Instructions - only show if no media yet */}

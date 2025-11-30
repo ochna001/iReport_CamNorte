@@ -5,8 +5,8 @@
  * and formatting addresses for Philippine locations.
  */
 
-// Google Maps API Key (same as in app.json)
-const GOOGLE_MAPS_API_KEY = 'AIzaSyBuylnOdkYntsIFYVDbsQFemeyqya1TaTc';
+// Google Maps API Key from environment variable
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export interface GeocodedAddress {
   street: string | null;

@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
 import React, { Component, useEffect, useState } from 'react';
@@ -82,6 +81,7 @@ interface LocationCardProps {
   location: Location.LocationObject | null;
   title?: string;
   editable?: boolean;
+  defaultExpanded?: boolean;
   onLocationChange?: (location: Location.LocationObject) => void;
 }
 
@@ -89,21 +89,19 @@ const LocationCard: React.FC<LocationCardProps> = ({
   location,
   title = '📍 Location',
   editable = false,
+  defaultExpanded,
   onLocationChange,
 }) => {
   const [address, setAddress] = useState<string>('Loading address...');
-  const [expanded, setExpanded] = useState(false);
+  // Default to expanded if editable or explicitly set
+  const [expanded, setExpanded] = useState(defaultExpanded ?? editable);
   const [loading, setLoading] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [showMap, setShowMap] = useState(false);
   
-  // TODO: Set to true once maps are verified working in development build
-  const ENABLE_MAPS_IN_PRODUCTION = false;
-  
-  // Check if we're in a development build (has devtools)
-  const isDevelopmentBuild = __DEV__ || Constants.appOwnership === 'expo';
-  const shouldShowMap = ENABLE_MAPS_IN_PRODUCTION || isDevelopmentBuild;
+  // Maps now use Google Places API which works in all builds
+  const shouldShowMap = true;
 
   useEffect(() => {
     if (location) {

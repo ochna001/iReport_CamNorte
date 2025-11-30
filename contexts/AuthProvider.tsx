@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
@@ -57,42 +56,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setDeviceId(storedDeviceId);
 
-      // Check network status first
-      const networkState = await NetInfo.fetch();
-      const online = networkState.isConnected && networkState.isInternetReachable;
-      setIsOffline(!online);
-
       // Check if user was in guest mode (browsing without auth)
       const wasGuestMode = await AsyncStorage.getItem(GUEST_MODE_KEY);
       if (wasGuestMode === 'true') {
         setIsGuestMode(true);
       }
 
-      if (online) {
-        // Try to get session with timeout
-        try {
-          const sessionPromise = supabase.auth.getSession();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Session check timeout')), 5000)
-          );
+      // Always try to connect - like YouTube, FB, etc.
+      // Don't rely on system's reported connectivity status
+      try {
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        );
+        
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        
+        if (session) {
+          setSession(session);
+          setIsAnonymous(session.user.is_anonymous || false);
           
-          const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-          
-          if (session) {
-            setSession(session);
-            setIsAnonymous(session.user.is_anonymous || false);
-            
-            // Store guest session ID for report tracking
-            if (session.user.is_anonymous) {
-              await AsyncStorage.setItem(GUEST_SESSION_KEY, session.user.id);
-            }
+          // Store guest session ID for report tracking
+          if (session.user.is_anonymous) {
+            await AsyncStorage.setItem(GUEST_SESSION_KEY, session.user.id);
           }
-        } catch (error) {
-          console.log('Session check failed or timed out, continuing offline:', error);
-          setIsOffline(true);
         }
-      } else {
-        console.log('App started offline, skipping session check');
+        setIsOffline(false);
+      } catch (error) {
+        console.log('Session check failed or timed out:', error);
+        setIsOffline(true);
       }
       
       setLoading(false);
@@ -100,20 +92,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     initAuth();
 
-    // Listen for network changes
-    const unsubscribeNetwork = NetInfo.addEventListener((state) => {
-      const online = state.isConnected && state.isInternetReachable;
-      setIsOffline(!online);
-    });
-
-    // Listen for auth state changes
+    // Listen for auth state changes - this also indicates we're online
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAnonymous(session?.user?.is_anonymous || false);
+      // If we receive auth events, we're online
+      if (_event !== 'INITIAL_SESSION') {
+        setIsOffline(false);
+      }
     });
 
     return () => {
-      unsubscribeNetwork();
       authListener.subscription.unsubscribe();
     };
   }, []);

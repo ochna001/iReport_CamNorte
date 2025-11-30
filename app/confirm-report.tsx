@@ -28,7 +28,8 @@ const ConfirmReportScreen = () => {
     longitude, 
     name, 
     age, 
-    description 
+    description,
+    phone
   } = useLocalSearchParams<{
     agency: Agency;
     mediaUris: string;
@@ -37,6 +38,7 @@ const ConfirmReportScreen = () => {
     name: string;
     age: string;
     description: string;
+    phone?: string;
   }>();
 
   const [address, setAddress] = useState<string>('Loading address...');
@@ -186,21 +188,28 @@ const ConfirmReportScreen = () => {
       }
 
       // 2. Create incident record
+      const incidentData: any = {
+        agency_type: agency.toLowerCase(),
+        reporter_id: reporterId,
+        reporter_name: name,
+        reporter_age: parseInt(age),
+        description: description,
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        location_address: address,
+        media_urls: uploadedMediaUrls,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+      
+      // Add phone for guest reporters
+      if (phone && phone.trim()) {
+        incidentData.reporter_phone = phone.trim();
+      }
+      
       const { data: incident, error: incidentError } = await supabase
         .from('incidents')
-        .insert({
-          agency_type: agency.toLowerCase(),
-          reporter_id: reporterId,
-          reporter_name: name,
-          reporter_age: parseInt(age),
-          description: description,
-          latitude: parseFloat(latitude),
-          longitude: parseFloat(longitude),
-          location_address: address,
-          media_urls: uploadedMediaUrls,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-        })
+        .insert(incidentData)
         .select()
         .single();
 

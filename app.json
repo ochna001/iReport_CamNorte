@@ -23,11 +23,6 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyBuylnOdkYntsIFYVDbsQFemeyqya1TaTc"
-        }
-      },
       "jsEngine": "hermes"
     },
     "web": {
@@ -49,7 +44,14 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logov1.png",
+          "color": "#1E88E5"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

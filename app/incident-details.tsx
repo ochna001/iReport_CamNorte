@@ -1,18 +1,19 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Calendar, Clock, FileText } from 'lucide-react-native';
+import { ArrowLeft, Building2, Calendar, Clock, FileText, MapPin, Phone, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    Linking,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { supabase } from '../lib/supabase';
@@ -30,6 +31,7 @@ interface Incident {
   updated_at: string;
   media_urls: string[];
   reporter_id: string;
+  assigned_station_id?: string;
   // Agency-specific fields
   crime_type?: string;
   suspect_description?: string;
@@ -37,6 +39,23 @@ interface Incident {
   estimated_damage?: string;
   disaster_type?: string;
   affected_count?: number;
+}
+
+interface AssignedStation {
+  id: number;
+  name: string;
+  address: string;
+  contact_number: string;
+  latitude: number;
+  longitude: number;
+}
+
+interface StatusHistoryItem {
+  id: string;
+  status: string;
+  notes: string | null;
+  changed_at: string;
+  changed_by: string | null; // Now stores name directly as text
 }
 
 const { width } = Dimensions.get('window');
@@ -49,10 +68,13 @@ export default function IncidentDetailsScreen() {
   const [incident, setIncident] = useState<Incident | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [assignedStation, setAssignedStation] = useState<AssignedStation | null>(null);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryItem[]>([]);
 
   useEffect(() => {
     if (incidentId) {
       fetchIncidentDetails();
+      fetchStatusHistory();
     }
   }, [incidentId]);
 
@@ -67,6 +89,11 @@ export default function IncidentDetailsScreen() {
       if (error) throw error;
 
       setIncident(data);
+
+      // Fetch assigned station if exists
+      if (data.assigned_station_id) {
+        fetchAssignedStation(data.assigned_station_id);
+      }
     } catch (error: any) {
       console.error('Error fetching incident:', error);
       Alert.alert('Error', 'Failed to load incident details', [
@@ -75,6 +102,51 @@ export default function IncidentDetailsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAssignedStation = async (stationId: string | number) => {
+    try {
+      const { data, error } = await supabase
+        .from('agency_stations')
+        .select('id, name, address, contact_number, latitude, longitude')
+        .eq('id', stationId)
+        .single();
+
+      if (!error && data) {
+        setAssignedStation(data);
+      }
+    } catch (error) {
+      console.error('Error fetching station:', error);
+    }
+  };
+
+  const fetchStatusHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('incident_status_history')
+        .select('id, status, notes, changed_at, changed_by')
+        .eq('incident_id', incidentId)
+        .order('changed_at', { ascending: true });
+
+      if (!error && data) {
+        setStatusHistory(data as StatusHistoryItem[]);
+      }
+    } catch (error) {
+      console.error('Error fetching status history:', error);
+    }
+  };
+
+  // Calculate distance between two coordinates in km
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
   const getAgencyColor = (agencyType: string) => {
@@ -325,20 +397,100 @@ export default function IncidentDetailsScreen() {
           </View>
         )}
 
+        {/* Assigned Station Info */}
+        {assignedStation && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Building2 size={20} color={Colors.text.primary} strokeWidth={2} />
+              <Text style={styles.sectionTitle}>Assigned Station</Text>
+            </View>
+            
+            <Text style={styles.stationName}>{assignedStation.name}</Text>
+            
+            {assignedStation.address && (
+              <View style={styles.stationRow}>
+                <MapPin size={16} color={Colors.text.secondary} strokeWidth={2} />
+                <Text style={styles.stationText}>{assignedStation.address}</Text>
+              </View>
+            )}
+            
+            {assignedStation.contact_number && (
+              <TouchableOpacity 
+                style={styles.stationRow}
+                onPress={() => Linking.openURL(`tel:${assignedStation.contact_number}`)}
+              >
+                <Phone size={16} color={Colors.primary} strokeWidth={2} />
+                <Text style={[styles.stationText, styles.stationPhone]}>{assignedStation.contact_number}</Text>
+              </TouchableOpacity>
+            )}
+            
+            {incident.latitude && assignedStation.latitude && (
+              <View style={styles.distanceContainer}>
+                <Text style={styles.distanceLabel}>Distance from incident:</Text>
+                <Text style={styles.distanceValue}>
+                  {calculateDistance(
+                    incident.latitude, 
+                    incident.longitude, 
+                    assignedStation.latitude, 
+                    assignedStation.longitude
+                  ).toFixed(1)} km
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Status Timeline */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Status Timeline</Text>
           <View style={styles.timeline}>
+            {/* Initial pending status */}
             <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: '#f59e0b' }]} />
+              <View style={styles.timelineLeft}>
+                <View style={[styles.timelineDot, { backgroundColor: '#f59e0b' }]} />
+                <View style={styles.timelineLine} />
+              </View>
               <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Pending</Text>
-                <Text style={styles.timelineDate}>{formatDate(incident.created_at)}</Text>
+                <Text style={styles.timelineStatus}>Report Submitted</Text>
+                <Text style={styles.timelineDate}>
+                  {formatDate(incident.created_at)} at {formatTime(incident.created_at)}
+                </Text>
               </View>
             </View>
-            {incident.status !== 'pending' && (
+
+            {/* Status history from database */}
+            {statusHistory.map((item, index) => (
+              <View key={item.id} style={styles.timelineItem}>
+                <View style={styles.timelineLeft}>
+                  <View style={[styles.timelineDot, { backgroundColor: getStatusColor(item.status) }]} />
+                  {index < statusHistory.length - 1 && <View style={styles.timelineLine} />}
+                </View>
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineStatus}>{getStatusLabel(item.status)}</Text>
+                  <Text style={styles.timelineDate}>
+                    {formatDate(item.changed_at)} at {formatTime(item.changed_at)}
+                  </Text>
+                  {item.changed_by && (
+                    <View style={styles.timelineOfficer}>
+                      <User size={12} color={Colors.text.secondary} strokeWidth={2} />
+                      <Text style={styles.timelineOfficerText}>{item.changed_by}</Text>
+                    </View>
+                  )}
+                  {item.notes && (
+                    <View style={styles.timelineNotes}>
+                      <Text style={styles.timelineNotesText}>"{item.notes}"</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            {/* Fallback if no history but status changed */}
+            {statusHistory.length === 0 && incident.status !== 'pending' && (
               <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: getStatusColor(incident.status) }]} />
+                <View style={styles.timelineLeft}>
+                  <View style={[styles.timelineDot, { backgroundColor: getStatusColor(incident.status) }]} />
+                </View>
                 <View style={styles.timelineContent}>
                   <Text style={styles.timelineStatus}>{getStatusLabel(incident.status)}</Text>
                   <Text style={styles.timelineDate}>{formatDate(incident.updated_at)}</Text>
@@ -522,6 +674,16 @@ const styles = StyleSheet.create({
   timelineContent: {
     flex: 1,
   },
+  timelineLeft: {
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: Colors.secondary,
+    marginTop: 4,
+  },
   timelineStatus: {
     fontSize: 15,
     fontWeight: '600',
@@ -531,6 +693,68 @@ const styles = StyleSheet.create({
   timelineDate: {
     fontSize: 13,
     color: Colors.text.secondary,
+  },
+  timelineOfficer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  timelineOfficerText: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  timelineNotes: {
+    backgroundColor: Colors.accent,
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  timelineNotesText: {
+    fontSize: 13,
+    color: Colors.text.primary,
+    fontStyle: 'italic',
+  },
+  // Station styles
+  stationName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 8,
+  },
+  stationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  stationText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    flex: 1,
+  },
+  stationPhone: {
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.secondary,
+  },
+  distanceLabel: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  distanceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   backButton: {
     backgroundColor: Colors.primary,

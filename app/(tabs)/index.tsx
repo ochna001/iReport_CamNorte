@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
@@ -52,19 +52,21 @@ export default function HomeScreen() {
     const responseTimes: number[] = [];
     
     incidents.forEach(incident => {
-      if (incident.created_at && incident.updated_at && incident.status !== 'pending') {
+      // Only count incidents that have been responded to (Assigned, On-Scene, Resolved, Closed)
+      // and have a first_response_at timestamp
+      if (incident.created_at && incident.first_response_at) {
         const created = new Date(incident.created_at).getTime();
-        const updated = new Date(incident.updated_at).getTime();
-        const diffMinutes = Math.floor((updated - created) / (1000 * 60));
+        const responded = new Date(incident.first_response_at).getTime();
+        const diffMinutes = Math.floor((responded - created) / (1000 * 60));
         
-        // Only count if response was within reasonable time (< 24 hours)
-        if (diffMinutes > 0 && diffMinutes < 1440) {
+        // Only count valid response times (> 0 and < 48 hours)
+        if (diffMinutes > 0 && diffMinutes < 2880) {
           responseTimes.push(diffMinutes);
         }
       }
     });
 
-    if (responseTimes.length === 0) return 'Pending';
+    if (responseTimes.length === 0) return 'N/A';
 
     const avgMinutes = Math.floor(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length);
     
@@ -98,8 +100,8 @@ export default function HomeScreen() {
         // Get incidents with response times for calculation
         const { data: incidentsData } = await supabase
           .from('incidents')
-          .select('created_at, updated_at, status')
-          .neq('status', 'pending')
+          .select('created_at, first_response_at, status')
+          .not('first_response_at', 'is', null)
           .limit(100);
 
         setStats({
@@ -129,9 +131,9 @@ export default function HomeScreen() {
         // Get user's incidents with response times
         const { data: userIncidents } = await supabase
           .from('incidents')
-          .select('created_at, updated_at, status')
+          .select('created_at, first_response_at, status')
           .eq('reporter_id', userId)
-          .neq('status', 'pending');
+          .not('first_response_at', 'is', null);
 
         setStats({
           totalReports: totalCount || 0,
@@ -207,33 +209,52 @@ export default function HomeScreen() {
         )}
 
         <Text style={styles.prompt}>What do you need to report?</Text>
+        <Text style={styles.hintText}>Tap a button below to start your report</Text>
         
         <View style={styles.buttonContainer}>
           {/* PNP Button */}
           <TouchableOpacity
             style={[styles.reportButton, styles.pnpButton]}
             onPress={() => handleReportPress('PNP')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonTitle}>Report Crime</Text>
-            <Text style={styles.buttonSubtitle}>Philippine National Police (PNP)</Text>
+            <View style={styles.buttonContent}>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonTitle}>Report Crime</Text>
+                <Text style={styles.buttonSubtitle}>Philippine National Police (PNP)</Text>
+              </View>
+              <Text style={styles.tapHint}>Tap to report →</Text>
+            </View>
           </TouchableOpacity>
 
           {/* BFP Button */}
           <TouchableOpacity
             style={[styles.reportButton, styles.bfpButton]}
             onPress={() => handleReportPress('BFP')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonTitle}>Report Fire</Text>
-            <Text style={styles.buttonSubtitle}>Bureau of Fire Protection (BFP)</Text>
+            <View style={styles.buttonContent}>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonTitle}>Report Fire</Text>
+                <Text style={styles.buttonSubtitle}>Bureau of Fire Protection (BFP)</Text>
+              </View>
+              <Text style={styles.tapHint}>Tap to report →</Text>
+            </View>
           </TouchableOpacity>
 
           {/* PDRRMO Button */}
           <TouchableOpacity
             style={[styles.reportButton, styles.pdrrmoButton]}
             onPress={() => handleReportPress('PDRRMO')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonTitle}>Report Disaster</Text>
-            <Text style={styles.buttonSubtitle}>Disaster Risk Reduction Management Office</Text>
+            <View style={styles.buttonContent}>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonTitle}>Report Disaster</Text>
+                <Text style={styles.buttonSubtitle}>Disaster Risk Reduction Management Office</Text>
+              </View>
+              <Text style={styles.tapHint}>Tap to report →</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -305,6 +326,27 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     lineHeight: 18,
   },
+  buttonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  buttonTextContainer: {
+    flex: 1,
+  },
+  tapHint: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontStyle: 'italic',
+    marginLeft: 12,
+  },
+  hintText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: 16,
+    marginTop: -8,
+  },
   statsSection: {
     marginBottom: 24,
   },
@@ -375,7 +417,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   statNumberLarge: {
-    fontSize: 28,
+    fontSize: 22,
   },
   statNumberBlue: {
     color: '#2563eb',

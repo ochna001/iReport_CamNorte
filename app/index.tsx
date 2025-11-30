@@ -39,8 +39,9 @@ export default function Index() {
     return <Redirect href="/(tabs)" />;
   }
 
-  // If user is in guest mode (or offline and was previously in guest mode), go to home
-  if (isGuestMode || isOffline) {
+  // If user explicitly entered guest mode before, go to home
+  // Note: isOffline alone should NOT skip onboarding - user must have completed onboarding first
+  if (isGuestMode) {
     return <Redirect href="/(tabs)" />;
   }
 

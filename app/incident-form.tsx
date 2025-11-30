@@ -2,15 +2,15 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
@@ -28,10 +28,14 @@ const IncidentFormScreen = () => {
     longitude: string;
   }>();
 
-  const { session } = useAuth();
+  const { session, isAnonymous } = useAuth();
   const [description, setDescription] = useState('');
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
+  const [phone, setPhone] = useState('');
+  
+  // Guest users need to provide contact info
+  const isGuest = !session || isAnonymous;
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [residentLocation, setResidentLocation] = useState<Location.LocationObject | null>(null);
@@ -206,6 +210,21 @@ const IncidentFormScreen = () => {
       return;
     }
     
+    // Validate phone for guests (required)
+    if (isGuest) {
+      if (!phone.trim()) {
+        Alert.alert('Required', 'Please enter your contact number so responders can reach you.');
+        return;
+      }
+      // Basic Philippine phone validation (09XX or +639XX)
+      const phoneClean = phone.replace(/[\s-]/g, '');
+      const phoneRegex = /^(\+63|0)?9\d{9}$/;
+      if (!phoneRegex.test(phoneClean)) {
+        Alert.alert('Invalid Phone', 'Please enter a valid Philippine mobile number (e.g., 09171234567).');
+        return;
+      }
+    }
+    
     // Validate description
     if (!description.trim()) {
       Alert.alert('Required', 'Please provide a description of the incident.');
@@ -231,6 +250,7 @@ const IncidentFormScreen = () => {
         name,
         age,
         description,
+        phone: isGuest ? phone : '',
       },
     });
   };
@@ -300,6 +320,25 @@ const IncidentFormScreen = () => {
               onChangeText={setAge}
               keyboardType="numeric"
             />
+
+            {/* Phone number - required for guests */}
+            {isGuest && (
+              <>
+                <Text style={styles.label}>Contact Number *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="09171234567"
+                  placeholderTextColor={Colors.text.secondary}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  maxLength={13}
+                />
+                <Text style={styles.helperText}>
+                  Required so responders can contact you about this incident
+                </Text>
+              </>
+            )}
           </View>
 
           {/* Resident Location */}

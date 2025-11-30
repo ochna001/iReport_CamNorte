@@ -1,16 +1,17 @@
+import { router } from 'expo-router';
+import { Bell, User2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { User2 } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
-import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
 
 export default function AppHeader() {
   const { session, isAnonymous } = useAuth();
   const insets = useSafeAreaInsets();
   const [displayName, setDisplayName] = useState<string>('');
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const user = session?.user;
   const isGuest = isAnonymous || !user;
@@ -18,6 +19,31 @@ export default function AppHeader() {
   useEffect(() => {
     if (user && !isAnonymous) {
       fetchDisplayName();
+      fetchUnreadCount();
+      
+      // Subscribe to realtime notifications
+      const channel = supabase
+        .channel('notifications-badge')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('[AppHeader] Notification change:', payload);
+            fetchUnreadCount();
+          }
+        )
+        .subscribe((status) => {
+          console.log('[AppHeader] Subscription status:', status);
+        });
+
+      return () => {
+        channel.unsubscribe();
+      };
     } else if (user) {
       setDisplayName(`Guest #${user.id?.slice(-6).toUpperCase() || '89FA5FDB'}`);
     } else {
@@ -47,8 +73,32 @@ export default function AppHeader() {
     }
   };
 
+  const fetchUnreadCount = async () => {
+    if (!user) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('is_read', false);
+
+      console.log('[AppHeader] Unread count:', count, 'Error:', error);
+      
+      if (!error) {
+        setUnreadCount(count || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching unread notifications:', error);
+    }
+  };
+
   const handleProfilePress = () => {
     router.push('/(tabs)/profile');
+  };
+
+  const handleNotificationPress = () => {
+    router.push('/notifications');
   };
 
   return (
@@ -58,17 +108,36 @@ export default function AppHeader() {
         <Text style={styles.subtitle}>Camarines Norte</Text>
       </View>
       
-      <Pressable style={styles.rightSection} onPress={handleProfilePress}>
-        <View style={styles.profileIcon}>
-          <User2 size={24} color={Colors.text.primary} strokeWidth={2} />
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          {isGuest && <Text style={styles.guestLabel}>Guest</Text>}
-        </View>
-      </Pressable>
+      <View style={styles.rightSection}>
+        {!isGuest && (
+          <Pressable 
+            style={styles.iconButton} 
+            onPress={handleNotificationPress}
+            hitSlop={8}
+          >
+            <Bell size={24} color={Colors.text.primary} />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+
+        <Pressable style={styles.profileButton} onPress={handleProfilePress}>
+          <View style={styles.profileIcon}>
+            <User2 size={24} color={Colors.text.primary} strokeWidth={2} />
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            {isGuest && <Text style={styles.guestLabel}>Guest</Text>}
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -99,6 +168,35 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconButton: {
+    padding: 8,
+    marginRight: 4,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#ff3b30',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  profileButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

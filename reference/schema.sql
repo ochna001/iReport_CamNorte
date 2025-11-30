@@ -1,17 +1,13 @@
--- iReport Database Schema for Supabase (PostgreSQL)
---
--- To use this schema:
--- 1. Navigate to your Supabase project.
--- 2. Go to the "SQL Editor" section.
--- 3. Click "+ New query".
--- 4. Copy and paste the entire content of this file into the editor.
--- 5. Click "RUN".
+-- iReport Database Schema Reference (READ-ONLY)
+-- WARNING: This schema is for context only and reflects the current Supabase database.
+-- Last updated: Nov 30, 2025
 
 -- Table for emergency response agencies (PNP, BFP, PDRRMO)
-CREATE TABLE IF NOT EXISTS public.agencies (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    short_name VARCHAR(10) NOT NULL UNIQUE
+CREATE TABLE public.agencies (
+    id INTEGER PRIMARY KEY DEFAULT nextval('agencies_id_seq'),
+    name VARCHAR NOT NULL UNIQUE,
+    short_name VARCHAR NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Insert the default agencies
@@ -23,89 +19,132 @@ VALUES
 ON CONFLICT (short_name) DO NOTHING;
 
 -- Table for individual agency stations/offices with their locations
-CREATE TABLE IF NOT EXISTS public.agency_stations (
-    id SERIAL PRIMARY KEY,
+CREATE TABLE public.agency_stations (
+    id INTEGER PRIMARY KEY DEFAULT nextval('agency_stations_id_seq'),
     agency_id INTEGER NOT NULL REFERENCES public.agencies(id),
-    name TEXT NOT NULL, -- e.g., "Daet Municipal Police Station"
-    latitude DECIMAL(9, 6) NOT NULL,
-    longitude DECIMAL(9, 6) NOT NULL,
+    name TEXT NOT NULL,
+    latitude NUMERIC NOT NULL,
+    longitude NUMERIC NOT NULL,
     contact_number TEXT,
-    address TEXT
+    address TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Table for public user profiles
--- This table is linked to Supabase's built-in `auth.users` table.
-CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+-- Table for agency resources (vehicles, equipment, personnel)
+CREATE TABLE public.agency_resources (
+    id INTEGER PRIMARY KEY DEFAULT nextval('agency_resources_id_seq'),
+    station_id INTEGER REFERENCES public.agency_stations(id),
+    name TEXT NOT NULL,
+    type VARCHAR CHECK (type IN ('vehicle', 'equipment', 'personnel')),
+    status VARCHAR DEFAULT 'available' CHECK (status IN ('available', 'deployed', 'maintenance')),
+    description TEXT,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+);
+
+-- Table for public user profiles (linked to auth.users)
+CREATE TABLE public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id),
     display_name TEXT,
     email TEXT UNIQUE,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('Resident', 'Field Officer', 'Chief')),
+    role VARCHAR NOT NULL CHECK (role IN ('Resident', 'Desk Officer', 'Field Officer', 'Chief')),
     agency_id INTEGER REFERENCES public.agencies(id),
-    phone_number VARCHAR(20),
+    phone_number VARCHAR,
+    age INTEGER CHECK (age >= 13 AND age <= 120),
+    date_of_birth DATE CHECK (date_of_birth <= CURRENT_DATE AND date_of_birth >= (CURRENT_DATE - '120 years'::interval)),
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Table for all incident reports
-CREATE TABLE IF NOT EXISTS public.incidents (
-    id BIGSERIAL PRIMARY KEY,
-    incident_type VARCHAR(50) NOT NULL CHECK (incident_type IN ('Crime', 'Fire', 'Disaster')),
-    agency_id INTEGER NOT NULL REFERENCES public.agencies(id),
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Assigned', 'On-Scene', 'Resolved', 'Closed')),
-    latitude DECIMAL(9, 6),
-    longitude DECIMAL(9, 6),
-    address_details JSONB, -- To store structured address: {"street": "...", "barangay": "..."}
-    submitted_by_user_id UUID REFERENCES public.profiles(id), -- Null if submitted by a guest
-    submitted_by_guest_info TEXT, -- For guest name/contact if provided
-    assigned_to_user_id UUID REFERENCES public.profiles(id), -- Null if unassigned
-    assigned_to_station_id INTEGER REFERENCES public.agency_stations(id), -- Which station is handling the incident
-    created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.incidents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agency_type TEXT NOT NULL CHECK (agency_type IN ('pnp', 'bfp', 'pdrrmo')),
+    reporter_id UUID REFERENCES auth.users(id),
+    reporter_name TEXT NOT NULL,
+    reporter_age INTEGER NOT NULL,
+    reporter_phone TEXT, -- Required for guest reporters, optional for registered users
+    description TEXT NOT NULL,
+    latitude NUMERIC NOT NULL,
+    longitude NUMERIC NOT NULL,
+    location_address TEXT,
+    media_urls TEXT[] DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'assigned', 'in_progress', 'resolved', 'closed')),
+    assigned_officer_id UUID REFERENCES auth.users(id),
+    assigned_officer_ids UUID[] DEFAULT '{}', -- Multiple officers can be assigned
+    assigned_station_id INTEGER REFERENCES public.agency_stations(id),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
+    updated_by TEXT, -- Stores name directly
+    first_response_at TIMESTAMPTZ
 );
 
 -- Table for media files (photos, videos) associated with an incident
-CREATE TABLE IF NOT EXISTS public.media (
-    id BIGSERIAL PRIMARY KEY,
-    incident_id BIGINT NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
-    storage_path TEXT NOT NULL, -- Path to the file in Supabase Storage
-    media_type VARCHAR(20) NOT NULL CHECK (media_type IN ('photo', 'video')),
+CREATE TABLE public.media (
+    id BIGINT PRIMARY KEY DEFAULT nextval('media_id_seq'),
+    incident_id BIGINT NOT NULL,
+    storage_path TEXT NOT NULL,
+    media_type VARCHAR NOT NULL CHECK (media_type IN ('photo', 'video')),
     uploaded_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Table for logging updates and notes on an incident
-CREATE TABLE IF NOT EXISTS public.incident_updates (
-    id BIGSERIAL PRIMARY KEY,
-    incident_id BIGINT NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
-    author_id UUID REFERENCES public.profiles(id), -- Can be null for system-generated updates
+CREATE TABLE public.incident_updates (
+    id BIGINT PRIMARY KEY DEFAULT nextval('incident_updates_id_seq'),
+    incident_id UUID NOT NULL REFERENCES public.incidents(id),
+    author_id UUID REFERENCES public.profiles(id),
     update_text TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Table for tracking status changes history
+CREATE TABLE public.incident_status_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    incident_id UUID NOT NULL REFERENCES public.incidents(id),
+    status TEXT NOT NULL,
+    notes TEXT,
+    changed_by TEXT NOT NULL, -- Stores officer name directly
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Table for detailed final reports upon case closure
-CREATE TABLE IF NOT EXISTS public.final_reports (
-    id BIGSERIAL PRIMARY KEY,
-    incident_id BIGINT NOT NULL UNIQUE REFERENCES public.incidents(id) ON DELETE CASCADE,
-    report_details JSONB NOT NULL, -- Flexible JSONB to store different fields for PNP, BFP, PDRRMO
+CREATE TABLE public.final_reports (
+    id BIGINT PRIMARY KEY DEFAULT nextval('final_reports_id_seq'),
+    incident_id UUID NOT NULL UNIQUE REFERENCES public.incidents(id),
+    report_details JSONB NOT NULL,
     completed_by_user_id UUID NOT NULL REFERENCES public.profiles(id),
     completed_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Table for user notifications
-CREATE TABLE IF NOT EXISTS public.notifications (
-    id BIGSERIAL PRIMARY KEY,
-    recipient_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    incident_id BIGINT REFERENCES public.incidents(id) ON DELETE CASCADE,
+CREATE TABLE public.notifications (
+    id BIGINT PRIMARY KEY DEFAULT nextval('notifications_id_seq'),
+    recipient_id UUID NOT NULL REFERENCES public.profiles(id),
+    incident_id UUID REFERENCES public.incidents(id),
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     is_read BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Enable Row Level Security (RLS) for all tables as a best practice
--- Note: Policies need to be created separately to define access rules.
-ALTER TABLE public.agencies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.agency_stations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.incident_updates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.final_reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+-- Table for push notification tokens
+CREATE TABLE public.push_tokens (
+    id BIGINT PRIMARY KEY DEFAULT nextval('push_tokens_id_seq'),
+    token TEXT NOT NULL UNIQUE,
+    user_id UUID REFERENCES auth.users(id),
+    device_id TEXT,
+    platform TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Table for security/audit logs
+CREATE TABLE public.security_logs (
+    id BIGINT PRIMARY KEY DEFAULT nextval('security_logs_id_seq'),
+    user_id UUID,
+    action TEXT NOT NULL,
+    details JSONB,
+    ip_address TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
