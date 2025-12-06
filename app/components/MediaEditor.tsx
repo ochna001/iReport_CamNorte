@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Dimensions,
     Image,
     Modal,
@@ -7,9 +8,10 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import ViewShot from 'react-native-view-shot';
 import { Colors } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -54,6 +56,41 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
   const [blurCircles, setBlurCircles] = useState<BlurCircle[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
   const [brushSize, setBrushSize] = useState(20);
+  const [saving, setSaving] = useState(false);
+  const viewShotRef = useRef<ViewShot>(null);
+  
+  // Refs to track current values for pan responder
+  const selectedToolRef = useRef<PenTool>(selectedTool);
+  const brushSizeRef = useRef(brushSize);
+  const currentPathRef = useRef(currentPath);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    selectedToolRef.current = selectedTool;
+  }, [selectedTool]);
+  
+  useEffect(() => {
+    brushSizeRef.current = brushSize;
+  }, [brushSize]);
+  
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
+
+  // Reset editor state when image changes or modal opens
+  useEffect(() => {
+    if (visible) {
+      setStrokes([]);
+      setBlurCircles([]);
+      setCurrentPath('');
+      setSelectedTool('blur');
+      setBrushSize(20);
+      setSaving(false);
+      selectedToolRef.current = 'blur';
+      brushSizeRef.current = 20;
+      currentPathRef.current = '';
+    }
+  }, [visible, imageUri]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -61,31 +98,48 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
-        if (selectedTool === 'blur') {
+        const tool = selectedToolRef.current;
+        const size = brushSizeRef.current;
+        
+        if (tool === 'blur') {
           // Add blur circle on tap
-          setBlurCircles([...blurCircles, { cx: locationX, cy: locationY, r: brushSize }]);
+          setBlurCircles(prev => [...prev, { cx: locationX, cy: locationY, r: size }]);
         } else {
-          setCurrentPath(`M${locationX},${locationY}`);
+          const newPath = `M${locationX},${locationY}`;
+          setCurrentPath(newPath);
+          currentPathRef.current = newPath;
         }
       },
       onPanResponderMove: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
-        if (selectedTool === 'blur') {
+        const tool = selectedToolRef.current;
+        const size = brushSizeRef.current;
+        
+        if (tool === 'blur') {
           // Add more blur circles while dragging
-          setBlurCircles(prev => [...prev, { cx: locationX, cy: locationY, r: brushSize }]);
+          setBlurCircles(prev => [...prev, { cx: locationX, cy: locationY, r: size }]);
         } else {
-          setCurrentPath(prev => `${prev} L${locationX},${locationY}`);
+          setCurrentPath(prev => {
+            const newPath = `${prev} L${locationX},${locationY}`;
+            currentPathRef.current = newPath;
+            return newPath;
+          });
         }
       },
       onPanResponderRelease: () => {
-        if (selectedTool !== 'blur' && currentPath) {
-          setStrokes([...strokes, {
-            path: currentPath,
-            color: TOOL_COLORS[selectedTool],
-            strokeWidth: selectedTool === 'arrow' ? 4 : brushSize,
-            tool: selectedTool,
+        const tool = selectedToolRef.current;
+        const size = brushSizeRef.current;
+        const path = currentPathRef.current;
+        
+        if (tool !== 'blur' && path) {
+          setStrokes(prev => [...prev, {
+            path: path,
+            color: TOOL_COLORS[tool],
+            strokeWidth: tool === 'arrow' ? 4 : size,
+            tool: tool,
           }]);
           setCurrentPath('');
+          currentPathRef.current = '';
         }
       },
     })
@@ -106,9 +160,31 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
     setCurrentPath('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const hasAnnotations = strokes.length > 0 || blurCircles.length > 0;
-    onSave(imageUri, hasAnnotations);
+    
+    if (!hasAnnotations) {
+      // No edits made, just return original
+      onSave(imageUri, false);
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      if (viewShotRef.current?.capture) {
+        const editedUri = await viewShotRef.current.capture();
+        onSave(editedUri, true);
+      } else {
+        // Fallback if capture fails
+        onSave(imageUri, hasAnnotations);
+      }
+    } catch (error) {
+      console.error('Error saving edited image:', error);
+      // Fallback to original on error
+      onSave(imageUri, hasAnnotations);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const hasContent = strokes.length > 0 || blurCircles.length > 0;
@@ -126,57 +202,67 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
             <Text style={styles.headerButtonText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Photo</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
-            <Text style={[styles.headerButtonText, styles.saveButton]}>Done</Text>
+          <TouchableOpacity onPress={handleSave} style={styles.headerButton} disabled={saving}>
+            {saving ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Text style={[styles.headerButtonText, styles.saveButton]}>Done</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Image Container with Drawing Canvas */}
         <View style={styles.imageContainer} {...panResponder.panHandlers}>
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-          
-          {/* SVG Drawing Layer */}
-          <Svg style={styles.svgOverlay}>
-            {/* Blur circles */}
-            {blurCircles.map((circle, index) => (
-              <Circle
-                key={`blur-${index}`}
-                cx={circle.cx}
-                cy={circle.cy}
-                r={circle.r}
-                fill="rgba(0, 0, 0, 0.85)"
-              />
-            ))}
+          <ViewShot 
+            ref={viewShotRef} 
+            options={{ format: 'jpg', quality: 0.9 }}
+            style={styles.viewShot}
+          >
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.image}
+              resizeMode="contain"
+            />
             
-            {/* Drawn strokes */}
-            {strokes.map((stroke, index) => (
-              <Path
-                key={`stroke-${index}`}
-                d={stroke.path}
-                stroke={stroke.color}
-                strokeWidth={stroke.strokeWidth}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
-            
-            {/* Current drawing path */}
-            {currentPath && selectedTool !== 'blur' && (
-              <Path
-                d={currentPath}
-                stroke={TOOL_COLORS[selectedTool]}
-                strokeWidth={selectedTool === 'arrow' ? 4 : brushSize}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-          </Svg>
+            {/* SVG Drawing Layer */}
+            <Svg style={styles.svgOverlay}>
+              {/* Blur circles */}
+              {blurCircles.map((circle, index) => (
+                <Circle
+                  key={`blur-${index}`}
+                  cx={circle.cx}
+                  cy={circle.cy}
+                  r={circle.r}
+                  fill="rgba(0, 0, 0, 0.85)"
+                />
+              ))}
+              
+              {/* Drawn strokes */}
+              {strokes.map((stroke, index) => (
+                <Path
+                  key={`stroke-${index}`}
+                  d={stroke.path}
+                  stroke={stroke.color}
+                  strokeWidth={stroke.strokeWidth}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+              
+              {/* Current drawing path */}
+              {currentPath && selectedTool !== 'blur' && (
+                <Path
+                  d={currentPath}
+                  stroke={TOOL_COLORS[selectedTool]}
+                  strokeWidth={selectedTool === 'arrow' ? 4 : brushSize}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+            </Svg>
+          </ViewShot>
         </View>
 
         {/* Pen Tools */}
@@ -310,6 +396,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  viewShot: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.5,
   },
   image: {
     width: SCREEN_WIDTH,

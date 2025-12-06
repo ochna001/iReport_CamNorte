@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '../contexts/AuthProvider';
 import { LanguageProvider } from '../contexts/LanguageProvider';
 import { LocationProvider } from '../contexts/LocationProvider';
+import { ReportDraftProvider } from '../contexts/ReportDraftProvider';
 import { addNotificationListeners, registerForPushNotifications } from '../lib/notifications';
 import { getQueueCount, setupNetworkListener } from '../lib/offlineQueue';
 
@@ -73,8 +74,9 @@ function AppContent() {
   }, []);
 
   return (
-    <LocationProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ReportDraftProvider>
+      <LocationProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="(tabs)" />
@@ -82,8 +84,9 @@ function AppContent() {
           <Stack.Screen name="screens/SignUpScreen" />
         </Stack>
         <StatusBar style="auto" />
-      </ThemeProvider>
-    </LocationProvider>
+        </ThemeProvider>
+      </LocationProvider>
+    </ReportDraftProvider>
   );
 }
 

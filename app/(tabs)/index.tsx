@@ -1,18 +1,19 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useLanguage } from '../../contexts/LanguageProvider';
+import { useReportDraft } from '../../contexts/ReportDraftProvider';
 import { supabase } from '../../lib/supabase';
 
 interface Stats {
@@ -23,14 +24,22 @@ interface Stats {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { session, isOffline } = useAuth();
+  const { session, isOffline, isAnonymous } = useAuth();
   const { t } = useLanguage();
+  const { clearDraft } = useReportDraft();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [showStats, setShowStats] = useState(true);
   const [statsMode, setStatsMode] = useState<'community' | 'personal'>('community');
 
   useEffect(() => {
+    // Hide stats for guest users
+    if (isAnonymous) {
+      setShowStats(false);
+      setLoadingStats(false);
+      return;
+    }
+    
     // Check user preference
     const metadata = session?.user?.user_metadata;
     setShowStats(metadata?.show_home_stats !== false);
@@ -46,7 +55,7 @@ export default function HomeScreen() {
     } else {
       setLoadingStats(false);
     }
-  }, [session, statsMode, isOffline]);
+  }, [session, statsMode, isOffline, isAnonymous]);
 
   const calculateAvgResponseTime = (incidents: any[]): string => {
     if (!incidents || incidents.length === 0) return 'N/A';
@@ -151,6 +160,8 @@ export default function HomeScreen() {
   };
 
   const handleReportPress = (agency: 'PNP' | 'BFP' | 'PDRRMO') => {
+    // Clear any existing draft when starting a new report
+    clearDraft();
     router.push({
       pathname: '/camera',
       params: { agency },

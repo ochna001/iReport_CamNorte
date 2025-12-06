@@ -16,6 +16,7 @@ import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useLanguage } from '../../contexts/LanguageProvider';
+import { useReportDraft } from '../../contexts/ReportDraftProvider';
 import { getQueue, processQueue, QueuedIncident } from '../../lib/offlineQueue';
 import { supabase } from '../../lib/supabase';
 
@@ -33,6 +34,7 @@ export default function ReportsScreen() {
   const router = useRouter();
   const { session, isAnonymous, deviceId, isOffline } = useAuth();
   const { t } = useLanguage();
+  const { savedDrafts, loadDraftFromList, deleteSavedDraft } = useReportDraft();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -206,6 +208,29 @@ export default function ReportsScreen() {
     router.push('/screens/SignUpScreen');
   };
 
+  const handleContinueDraft = (draft: SavedDraft) => {
+    loadDraftFromList(draft.id);
+    router.push({
+      pathname: '/incident-form',
+      params: { agency: draft.agency || 'PNP' },
+    });
+  };
+
+  const handleDeleteDraft = (draft: SavedDraft) => {
+    Alert.alert(
+      'Delete Draft?',
+      'Are you sure you want to delete this draft? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteSavedDraft(draft.id),
+        },
+      ]
+    );
+  };
+
   const renderIncident = ({ item }: { item: Incident }) => (
     <TouchableOpacity
       style={styles.incidentCard}
@@ -306,6 +331,48 @@ export default function ReportsScreen() {
               +{pendingReports.length - 3} more pending...
             </Text>
           )}
+        </View>
+      )}
+
+      {/* Saved Drafts Section */}
+      {savedDrafts.length > 0 && (
+        <View style={styles.draftsSection}>
+          <Text style={styles.draftsTitle}>📝 Saved Drafts ({savedDrafts.length})</Text>
+          <Text style={styles.draftsSubtext}>Continue where you left off</Text>
+          {savedDrafts.map((draft) => (
+            <View key={draft.id} style={styles.draftItem}>
+              <View style={styles.draftInfo}>
+                <View style={[styles.draftAgencyBadge, { backgroundColor: getAgencyColor(draft.agency?.toLowerCase() || 'pnp') }]}>
+                  <Text style={styles.draftAgencyText}>
+                    {draft.agency === 'PNP' ? '🚔' : draft.agency === 'BFP' ? '🔥' : '🌊'} {draft.agency || 'Unknown'}
+                  </Text>
+                </View>
+                <Text style={styles.draftDesc} numberOfLines={1}>
+                  {draft.description || 'No description'}
+                </Text>
+                <Text style={styles.draftMeta}>
+                  {draft.media.length} media • {new Date(draft.savedAt).toLocaleDateString()}
+                </Text>
+                {draft.address && (
+                  <Text style={styles.draftLocation} numberOfLines={1}>📍 {draft.address}</Text>
+                )}
+              </View>
+              <View style={styles.draftActions}>
+                <TouchableOpacity 
+                  style={styles.draftContinueBtn}
+                  onPress={() => handleContinueDraft(draft)}
+                >
+                  <Text style={styles.draftContinueText}>Continue</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.draftDeleteBtn}
+                  onPress={() => handleDeleteDraft(draft)}
+                >
+                  <Text style={styles.draftDeleteText}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
         </View>
       )}
 
@@ -648,5 +715,84 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 4,
+  },
+  draftsSection: {
+    backgroundColor: '#e0f2fe',
+    padding: 16,
+    margin: 16,
+    marginTop: 0,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0284c7',
+  },
+  draftsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0369a1',
+    marginBottom: 4,
+  },
+  draftsSubtext: {
+    fontSize: 12,
+    color: '#0369a1',
+    marginBottom: 12,
+  },
+  draftItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  draftInfo: {
+    flex: 1,
+  },
+  draftAgencyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  draftAgencyText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  draftDesc: {
+    fontSize: 14,
+    color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  draftMeta: {
+    fontSize: 11,
+    color: Colors.text.secondary,
+  },
+  draftLocation: {
+    fontSize: 11,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  draftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  draftContinueBtn: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  draftContinueText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  draftDeleteBtn: {
+    padding: 6,
+  },
+  draftDeleteText: {
+    fontSize: 16,
   },
 });

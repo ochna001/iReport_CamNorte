@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface AuthContextType {
   session: Session | null;
@@ -62,6 +62,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsGuestMode(true);
       }
 
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured) {
+        console.log('Supabase not configured - running in offline mode');
+        setIsOffline(true);
+        setLoading(false);
+        return;
+      }
+
       // Always try to connect - like YouTube, FB, etc.
       // Don't rely on system's reported connectivity status
       try {
@@ -108,6 +116,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signInAnonymously = async () => {
+    // If Supabase is not configured, just enter guest mode
+    if (!isSupabaseConfigured) {
+      console.log('Supabase not configured - entering offline guest mode');
+      setIsGuestMode(true);
+      setIsAnonymous(true);
+      await AsyncStorage.setItem(GUEST_MODE_KEY, 'true');
+      return;
+    }
+
     const { data, error } = await supabase.auth.signInAnonymously({
       options: {
         data: {

@@ -1,17 +1,21 @@
+import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
+import { useLanguage } from '../contexts/LanguageProvider';
+import { useReportDraft } from '../contexts/ReportDraftProvider';
 import { formatPhilippineAddress, reverseGeocodeWithOSM } from '../lib/geocoding';
 import { addToQueue, isOnline } from '../lib/offlineQueue';
 import { supabase } from '../lib/supabase';
@@ -21,29 +25,18 @@ type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 const ConfirmReportScreen = () => {
   const router = useRouter();
   const { session, isGuestMode, signInAnonymously } = useAuth();
-  const { 
-    agency, 
-    mediaUris, 
-    latitude, 
-    longitude, 
-    name, 
-    age, 
-    description,
-    phone
-  } = useLocalSearchParams<{
-    agency: Agency;
-    mediaUris: string;
-    latitude: string;
-    longitude: string;
-    name: string;
-    age: string;
-    description: string;
-    phone?: string;
-  }>();
+  const { draft, clearDraft } = useReportDraft();
+  const { agency } = useLocalSearchParams<{ agency: Agency }>();
+  const { t } = useLanguage();
+
+  // Get data from draft context
+  const { media, latitude, longitude, name, age, description, phone } = draft;
+  const mediaUris = JSON.stringify(media.map(m => m.uri));
 
   const [address, setAddress] = useState<string>('Loading address...');
   const [submitting, setSubmitting] = useState(false);
-  const media = mediaUris ? JSON.parse(mediaUris) : [];
+  const [previewMedia, setPreviewMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
   const timestamp = new Date();
 
   useEffect(() => {
@@ -52,8 +45,12 @@ const ConfirmReportScreen = () => {
 
   const loadAddress = async () => {
     try {
-      const lat = parseFloat(latitude);
-      const lon = parseFloat(longitude);
+      if (!latitude || !longitude) {
+        setAddress('Location not available');
+        return;
+      }
+      const lat = latitude;
+      const lon = longitude;
       const result = await reverseGeocodeWithOSM(lat, lon);
       setAddress(formatPhilippineAddress(result.formattedAddress));
     } catch (error) {
@@ -77,13 +74,13 @@ const ConfirmReportScreen = () => {
   const getAgencyName = () => {
     switch (agency) {
       case 'PNP':
-        return 'Crime Report';
+        return t('confirm.crimeReport');
       case 'BFP':
-        return 'Fire Report';
+        return t('confirm.fireReport');
       case 'PDRRMO':
-        return 'Disaster Report';
+        return t('confirm.disasterReport');
       default:
-        return 'Incident Report';
+        return t('confirm.incidentReport');
     }
   };
 
@@ -114,8 +111,8 @@ const ConfirmReportScreen = () => {
       if (!online) {
         // Save to offline queue
         Alert.alert(
-          'No Internet Connection',
-          'Your report will be saved and submitted automatically when you\'re back online.',
+          t('confirm.noInternet'),
+          t('confirm.offlineMessage'),
           [
             {
               text: 'OK',
@@ -130,6 +127,9 @@ const ConfirmReportScreen = () => {
                   address,
                   mediaUris,
                 });
+                
+                // Clear draft after queuing
+                await clearDraft();
                 
                 router.replace({
                   pathname: '/report-success',
@@ -148,7 +148,7 @@ const ConfirmReportScreen = () => {
 
       // Validate media count
       if (media.length > 10) {
-        Alert.alert('Too Many Files', 'You can only upload up to 10 photos/videos per report.');
+        Alert.alert(t('confirm.tooManyFiles'), t('confirm.maxFiles'));
         setSubmitting(false);
         return;
       }
@@ -156,13 +156,13 @@ const ConfirmReportScreen = () => {
       // 1. Upload media files to Supabase Storage
       const uploadedMediaUrls: string[] = [];
       
-      for (const mediaUri of media) {
-        const fileExt = mediaUri.split('.').pop() || 'jpg';
+      for (const mediaItem of media) {
+        const fileExt = mediaItem.uri.split('.').pop() || 'jpg';
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `incidents/${fileName}`;
 
         // Read file as ArrayBuffer for React Native
-        const response = await fetch(mediaUri);
+        const response = await fetch(mediaItem.uri);
         const arrayBuffer = await response.arrayBuffer();
         const fileData = new Uint8Array(arrayBuffer);
 
@@ -194,8 +194,8 @@ const ConfirmReportScreen = () => {
         reporter_name: name,
         reporter_age: parseInt(age),
         description: description,
-        latitude: parseFloat(latitude),
-        longitude: parseFloat(longitude),
+        latitude: latitude,
+        longitude: longitude,
         location_address: address,
         media_urls: uploadedMediaUrls,
         status: 'pending',
@@ -215,7 +215,10 @@ const ConfirmReportScreen = () => {
 
       if (incidentError) throw incidentError;
 
-      // 3. Navigate to success screen
+      // 3. Clear draft after successful submission
+      await clearDraft();
+
+      // 4. Navigate to success screen
       router.replace({
         pathname: '/report-success',
         params: {
@@ -228,17 +231,17 @@ const ConfirmReportScreen = () => {
       console.error('Submission error:', error);
       
       // Handle specific error types
-      let errorTitle = 'Submission Failed';
-      let errorMessage = 'Failed to submit report. Please try again.';
+      let errorTitle = t('confirm.submissionFailed');
+      let errorMessage = t('confirm.tryAgain');
       
       if (error.message?.includes('Rate limit exceeded')) {
-        errorTitle = 'Too Many Reports';
-        errorMessage = 'You can only submit 5 reports per hour. Please try again later.';
+        errorTitle = t('confirm.tooManyReports');
+        errorMessage = t('confirm.rateLimitMessage');
       } else if (error.message?.includes('Invalid')) {
-        errorTitle = 'Invalid Data';
+        errorTitle = t('confirm.invalidData');
         errorMessage = error.message;
       } else if (error.message?.includes('too long')) {
-        errorTitle = 'Content Too Long';
+        errorTitle = t('confirm.contentTooLong');
         errorMessage = error.message;
       } else if (error.message) {
         errorMessage = error.message;
@@ -259,63 +262,75 @@ const ConfirmReportScreen = () => {
           style={styles.backButton}
           disabled={submitting}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confirm Report</Text>
-        <Text style={styles.headerSubtitle}>Review before submitting</Text>
+        <Text style={styles.headerTitle}>{t('confirm.title')}</Text>
+        <Text style={styles.headerSubtitle}>{t('confirm.subtitle')}</Text>
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {/* Summary Card */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>✅ Report Summary</Text>
+          <Text style={styles.summaryTitle}>{t('confirm.summary')}</Text>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Type:</Text>
+            <Text style={styles.summaryLabel}>{t('confirm.reportType')}:</Text>
             <Text style={styles.summaryValue}>{getAgencyName()}</Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Location:</Text>
+            <Text style={styles.summaryLabel}>{t('confirm.location')}:</Text>
             <Text style={styles.summaryValue}>{address}</Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Date & Time:</Text>
+            <Text style={styles.summaryLabel}>{t('confirm.dateTime')}:</Text>
             <Text style={styles.summaryValue}>
               {timestamp.toLocaleDateString()} {timestamp.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
             </Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Evidence:</Text>
-            <Text style={styles.summaryValue}>{media.length} photo(s)</Text>
+            <Text style={styles.summaryLabel}>{t('confirm.evidence')}:</Text>
+            <Text style={styles.summaryValue}>
+              {media.filter(m => m.type === 'image').length} photo(s), {media.filter(m => m.type === 'video').length} video(s)
+            </Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Reporter:</Text>
+            <Text style={styles.summaryLabel}>{t('confirm.reporter')}:</Text>
             <Text style={styles.summaryValue}>{name}, {age} years old</Text>
           </View>
         </View>
 
         {/* Description */}
         <View style={styles.descriptionCard}>
-          <Text style={styles.descriptionLabel}>Description:</Text>
+          <Text style={styles.descriptionLabel}>{t('confirm.description')}:</Text>
           <Text style={styles.descriptionText}>{description}</Text>
         </View>
 
         {/* Media Preview */}
         {media.length > 0 && (
           <View style={styles.mediaCard}>
-            <Text style={styles.mediaLabel}>Captured Evidence:</Text>
+            <Text style={styles.mediaLabel}>{t('confirm.evidence')}:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.mediaGrid}>
-                {media.map((uri: string, index: number) => (
-                  <Image 
+                {media.map((item, index) => (
+                  <TouchableOpacity 
                     key={index} 
-                    source={{ uri }} 
-                    style={styles.mediaThumbnail}
-                  />
+                    style={styles.mediaThumbnailWrapper}
+                    onPress={() => setPreviewMedia(item)}
+                  >
+                    <Image 
+                      source={{ uri: item.uri }} 
+                      style={styles.mediaThumbnail}
+                    />
+                    {item.type === 'video' && (
+                      <View style={styles.videoOverlay}>
+                        <Text style={styles.videoIcon}>▶</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 ))}
               </View>
             </ScrollView>
@@ -329,29 +344,78 @@ const ConfirmReportScreen = () => {
             onPress={() => router.back()}
             disabled={submitting}
           >
-            <Text style={styles.editButtonText}>✏️ Edit Report</Text>
+            <Text style={styles.editButtonText}>{t('confirm.edit')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, styles.submitButton, { backgroundColor: getAgencyColor() }]}
+            style={[
+              styles.button, 
+              styles.submitButton, 
+              { backgroundColor: getAgencyColor() },
+              (!confirmed || submitting) && styles.submitButtonDisabled
+            ]}
             onPress={handleSubmit}
-            disabled={submitting}
+            disabled={!confirmed || submitting}
           >
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitButtonText}>📤 Submit Report</Text>
+              <Text style={styles.submitButtonText}>{t('confirm.submit')}</Text>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Disclaimer */}
-        <View style={styles.disclaimer}>
-          <Text style={styles.disclaimerText}>
-            By submitting this report, you confirm that the information provided is accurate to the best of your knowledge.
+        {/* Confirmation Checkbox */}
+        <TouchableOpacity 
+          style={styles.confirmationRow}
+          onPress={() => setConfirmed(!confirmed)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.checkbox, confirmed && styles.checkboxChecked]}>
+            {confirmed && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+          <Text style={styles.confirmationText}>
+            {t('confirm.agreement')}
           </Text>
-        </View>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* Media Preview Modal */}
+      <Modal
+        visible={previewMedia !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPreviewMedia(null)}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalClose}
+            onPress={() => setPreviewMedia(null)}
+          >
+            <Text style={styles.modalCloseText}>✕ Close</Text>
+          </TouchableOpacity>
+          
+          {previewMedia && (
+            <View style={styles.modalContent}>
+              {previewMedia.type === 'video' ? (
+                <Video
+                  source={{ uri: previewMedia.uri }}
+                  style={styles.previewVideo}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                />
+              ) : (
+                <Image 
+                  source={{ uri: previewMedia.uri }} 
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -456,6 +520,24 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 8,
   },
+  mediaThumbnailWrapper: {
+    position: 'relative',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIcon: {
+    color: '#fff',
+    fontSize: 24,
+  },
   buttonContainer: {
     gap: 12,
     marginBottom: 16,
@@ -479,21 +561,80 @@ const styles = StyleSheet.create({
     minHeight: 56,
     justifyContent: 'center',
   },
+  submitButtonDisabled: {
+    opacity: 0.5,
+  },
   submitButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  disclaimer: {
+  confirmationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
   },
-  disclaimerText: {
-    fontSize: 12,
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.text.secondary,
+    marginRight: 12,
+    marginTop: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  confirmationText: {
+    flex: 1,
+    fontSize: 13,
     color: Colors.text.secondary,
-    textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  modalContent: {
+    width: '100%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  previewVideo: {
+    width: '100%',
+    height: '100%',
   },
 });
 

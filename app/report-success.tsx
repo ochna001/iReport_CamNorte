@@ -1,13 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import { useEffect } from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    BackHandler,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 
@@ -22,6 +23,17 @@ const ReportSuccessScreen = () => {
   }>();
 
   const isOffline = offline === 'true';
+  const { t } = useLanguage();
+
+  // Handle hardware back button - go to home instead of back to form
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      router.replace('/(tabs)');
+      return true; // Prevent default back behavior
+    });
+
+    return () => backHandler.remove();
+  }, [router]);
 
   const getAgencyColor = () => {
     switch (agency) {
@@ -61,23 +73,23 @@ const ReportSuccessScreen = () => {
       </View>
 
       {/* Success Message */}
-      <Text style={styles.title}>{isOffline ? 'Report Queued!' : 'Report Submitted!'}</Text>
+      <Text style={styles.title}>{isOffline ? t('success.titleOffline') : t('success.title')}</Text>
       <Text style={styles.subtitle}>
         {isOffline 
-          ? `Your report has been saved and will be automatically submitted to ${getAgencyName()} when you're back online.`
-          : `Your report has been successfully submitted to ${getAgencyName()}.`
+          ? t('success.messageOffline')
+          : t('success.message')
         }
       </Text>
 
       {/* Tracking Info */}
       {!isOffline && (
         <View style={styles.trackingCard}>
-          <Text style={styles.trackingLabel}>Your Tracking Code </Text>
+          <Text style={styles.trackingLabel}>{t('success.trackingId')}</Text>
           <Text style={styles.trackingNumber} selectable>
             {incidentId?.substring(0, 8).toUpperCase()}
           </Text>
           <Text style={styles.trackingHint}>
-            Save this code to track your report status
+            {t('success.trackingHint')}
           </Text>
         </View>
       )}
@@ -86,32 +98,32 @@ const ReportSuccessScreen = () => {
       {isOffline && (
         <View style={styles.offlineCard}>
           <Text style={styles.offlineIcon}>📡</Text>
-          <Text style={styles.offlineTitle}>Saved Offline</Text>
+          <Text style={styles.offlineTitle}>{t('success.offlineTitle')}</Text>
           <Text style={styles.offlineText}>
-            Your report is safely stored on your device and will be submitted automatically when internet connection is restored.
+            {t('success.offlineMessage')}
           </Text>
         </View>
       )}
 
       {/* What's Next */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>What happens next?</Text>
+        <Text style={styles.infoTitle}>{t('success.whatNext')}</Text>
         <View style={styles.infoStep}>
           <Text style={styles.stepNumber}>1</Text>
           <Text style={styles.stepText}>
-            Your report is being reviewed by the desk officer
+            {t('success.step1')}
           </Text>
         </View>
         <View style={styles.infoStep}>
           <Text style={styles.stepNumber}>2</Text>
           <Text style={styles.stepText}>
-            A field officer will be assigned to respond
+            {t('success.step2')}
           </Text>
         </View>
         <View style={styles.infoStep}>
           <Text style={styles.stepNumber}>3</Text>
           <Text style={styles.stepText}>
-            You'll receive updates on your report status
+            {t('success.step3')}
           </Text>
         </View>
       </View>
@@ -122,7 +134,7 @@ const ReportSuccessScreen = () => {
           style={[styles.button, styles.primaryButton, { backgroundColor: getAgencyColor() }]}
           onPress={() => router.replace('/(tabs)')}
         >
-          <Text style={styles.primaryButtonText}>Return to Home</Text>
+          <Text style={styles.primaryButtonText}>{t('success.goHome')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -131,14 +143,14 @@ const ReportSuccessScreen = () => {
             router.replace('/(tabs)/reports');
           }}
         >
-          <Text style={styles.secondaryButtonText}>View My Reports</Text>
+          <Text style={styles.secondaryButtonText}>{t('success.viewReports')}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Emergency Note */}
       <View style={styles.emergencyNote}>
         <Text style={styles.emergencyText}>
-          🚨 In case of immediate emergency, please call the hotline directly
+          {t('success.emergencyNote')}
         </Text>
       </View>
       </ScrollView>

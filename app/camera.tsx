@@ -1,8 +1,9 @@
+import { ResizeMode, Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Camera } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -15,7 +16,9 @@ import {
   View
 } from 'react-native';
 import { Colors } from '../constants/colors';
+import { useLanguage } from '../contexts/LanguageProvider';
 import { useLocation } from '../contexts/LocationProvider';
+import { useReportDraft } from '../contexts/ReportDraftProvider';
 import LocationCard from './components/LocationCard';
 import MediaEditor from './components/MediaEditor';
 
@@ -30,13 +33,18 @@ interface MediaItem {
 const CameraScreen = () => {
   const router = useRouter();
   const { agency } = useLocalSearchParams<{ agency: Agency }>();
+  const { t } = useLanguage();
   
   // Use global location from context (fetched on app startup)
   const { location: globalLocation, loading: locationLoading, permissionDenied, refreshLocation } = useLocation();
   
+  // Use draft context for persisting media and form data
+  const { draft, setAgency, setMedia: setDraftMedia, addMedia: addDraftMedia, removeMedia: removeDraftMedia, updateMedia: updateDraftMedia, setLocation: setDraftLocation } = useReportDraft();
+  
   // Local state for location (can be edited by user)
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [media, setMedia] = useState<MediaItem[]>([]);
+  // Use draft media instead of local state
+  const media = draft.media;
   const [loading, setLoading] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
   const [editingMediaIndex, setEditingMediaIndex] = useState<number | null>(null);
@@ -49,9 +57,15 @@ const CameraScreen = () => {
   }, [globalLocation]);
 
   useEffect(() => {
+    // Set agency in draft when screen loads
+    if (agency) {
+      setAgency(agency);
+    }
     requestPermissions();
-    // Auto-open camera when screen loads
-    handleTakePhoto();
+    // Auto-open camera when screen loads (only if no media yet)
+    if (draft.media.length === 0) {
+      handleTakePhoto();
+    }
   }, []);
 
   const requestPermissions = async () => {
@@ -89,7 +103,7 @@ const CameraScreen = () => {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setMedia([...media, { uri: result.assets[0].uri, type: 'image' }]);
+        addDraftMedia([{ uri: result.assets[0].uri, type: 'image' }]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to capture photo');
@@ -106,7 +120,7 @@ const CameraScreen = () => {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setMedia([...media, { uri: result.assets[0].uri, type: 'video' }]);
+        addDraftMedia([{ uri: result.assets[0].uri, type: 'video' }]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to capture video');
@@ -126,7 +140,7 @@ const CameraScreen = () => {
           uri: asset.uri,
           type: asset.type === 'video' ? 'video' as const : 'image' as const,
         }));
-        setMedia([...media, ...newMedia]);
+        addDraftMedia(newMedia);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select media');
@@ -134,7 +148,7 @@ const CameraScreen = () => {
   };
 
   const handleRemoveMedia = (index: number) => {
-    setMedia(media.filter((_, i) => i !== index));
+    removeDraftMedia(index);
   };
 
   const handleContinue = () => {
@@ -156,14 +170,14 @@ const CameraScreen = () => {
       return;
     }
 
-    // Navigate to incident form with media and location
+    // Save location to draft
+    setDraftLocation(location.coords.latitude, location.coords.longitude);
+
+    // Navigate to incident form (data is already in draft context)
     router.push({
       pathname: '/incident-form',
       params: {
         agency,
-        mediaUris: JSON.stringify(media.map(m => m.uri)),
-        latitude: location?.coords.latitude.toString(),
-        longitude: location?.coords.longitude.toString(),
       },
     });
   };
@@ -184,13 +198,13 @@ const CameraScreen = () => {
   const getAgencyName = () => {
     switch (agency) {
       case 'PNP':
-        return 'Crime Report';
+        return t('form.crimeReport');
       case 'BFP':
-        return 'Fire Report';
+        return t('form.fireReport');
       case 'PDRRMO':
-        return 'Disaster Report';
+        return t('form.disasterReport');
       default:
-        return 'Incident Report';
+        return t('form.incidentReport');
     }
   };
 
@@ -199,34 +213,33 @@ const CameraScreen = () => {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: getAgencyColor() }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{getAgencyName()}</Text>
-        <Text style={styles.headerSubtitle}>Capture Evidence</Text>
+        <Text style={styles.headerSubtitle}>{t('camera.title')}</Text>
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {/* Location Info */}
         {permissionDenied ? (
           <View style={styles.locationDeniedCard}>
-            <Text style={styles.locationDeniedTitle}>📍 Location Required</Text>
+            <Text style={styles.locationDeniedTitle}>{t('camera.locationRequired')}</Text>
             <Text style={styles.locationDeniedText}>
-              Location permission is required to tag the incident location. 
-              Please enable location access to continue.
+              {t('camera.locationPermission')}
             </Text>
             <TouchableOpacity 
               style={[styles.retryButton, { backgroundColor: getAgencyColor() }]}
               onPress={handleRetryLocation}
             >
               <Text style={styles.retryButtonText}>
-                {locationLoading ? 'Checking...' : 'Enable Location'}
+                {locationLoading ? t('camera.locationLoading') : t('camera.grantPermission')}
               </Text>
             </TouchableOpacity>
           </View>
         ) : (
           <LocationCard 
             location={location} 
-            title="📍 Confirm Incident Location" 
+            title={t('form.incidentLocation')} 
             editable={true}
             onLocationChange={setLocation}
           />
@@ -235,9 +248,9 @@ const CameraScreen = () => {
         {/* Instructions - only show if no media yet */}
         {media.length === 0 && (
           <View style={styles.instructionCard}>
-            <Text style={styles.instructionTitle}>📸 Capture Evidence</Text>
+            <Text style={styles.instructionTitle}>{t('camera.title')}</Text>
             <Text style={styles.instructionText}>
-              Camera will open automatically. Take photos or videos of the incident.
+              {t('camera.subtitle')}
             </Text>
           </View>
         )}
@@ -245,7 +258,7 @@ const CameraScreen = () => {
         {/* Media Preview */}
         {media.length > 0 && (
           <View style={styles.mediaSection}>
-            <Text style={styles.sectionTitle}>Captured Media ({media.length})</Text>
+            <Text style={styles.sectionTitle}>{t('camera.capturedMedia')} ({media.length})</Text>
             <View style={styles.mediaGrid}>
               {media.map((item, index) => (
                 <TouchableOpacity 
@@ -291,21 +304,21 @@ const CameraScreen = () => {
             onPress={handleTakePhoto}
           >
             <Camera size={24} color="#fff" />
-            <Text style={styles.cameraButtonText}>Take Another Photo</Text>
+            <Text style={styles.cameraButtonText}>{t('camera.takeAnotherPhoto')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.cameraButton, styles.secondaryButton]}
             onPress={handleTakeVideo}
           >
-            <Text style={styles.secondaryButtonText}>📹 Record Video</Text>
+            <Text style={styles.secondaryButtonText}>{t('camera.takeVideo')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.cameraButton, styles.secondaryButton]}
             onPress={handleSelectFromGallery}
           >
-            <Text style={styles.secondaryButtonText}>📁 Choose from Gallery</Text>
+            <Text style={styles.secondaryButtonText}>{t('camera.chooseFromGallery')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -315,7 +328,7 @@ const CameraScreen = () => {
             style={[styles.continueButton, { backgroundColor: getAgencyColor() }]}
             onPress={handleContinue}
           >
-            <Text style={styles.continueButtonText}>Continue to Report Form →</Text>
+            <Text style={styles.continueButtonText}>{t('camera.continueToForm')}</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -325,14 +338,12 @@ const CameraScreen = () => {
         <MediaEditor
           visible={true}
           imageUri={media[editingMediaIndex].uri}
-          onSave={(editedUri, hasBlur) => {
-            const updatedMedia = [...media];
-            updatedMedia[editingMediaIndex] = {
-              ...updatedMedia[editingMediaIndex],
+          onSave={(editedUri: string, hasBlur: boolean) => {
+            updateDraftMedia(editingMediaIndex, {
+              ...media[editingMediaIndex],
               uri: editedUri,
               hasBlur,
-            };
-            setMedia(updatedMedia);
+            });
             setEditingMediaIndex(null);
           }}
           onCancel={() => setEditingMediaIndex(null)}
@@ -356,16 +367,20 @@ const CameraScreen = () => {
           
           {previewMedia && (
             <View style={styles.modalContent}>
-              <Image 
-                source={{ uri: previewMedia.uri }} 
-                style={styles.previewImage}
-                resizeMode="contain"
-              />
-              {previewMedia.type === 'video' && (
-                <View style={styles.videoPreviewBadge}>
-                  <Text style={styles.videoPreviewText}>📹 Video Preview</Text>
-                  <Text style={styles.videoPreviewSubtext}>Tap play in the form to view</Text>
-                </View>
+              {previewMedia.type === 'video' ? (
+                <Video
+                  source={{ uri: previewMedia.uri }}
+                  style={styles.previewVideo}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                />
+              ) : (
+                <Image 
+                  source={{ uri: previewMedia.uri }} 
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
               )}
             </View>
           )}
@@ -597,6 +612,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   previewImage: {
+    width: '100%',
+    height: '80%',
+  },
+  previewVideo: {
     width: '100%',
     height: '80%',
   },
