@@ -1,18 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    FlatList,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  FlatList,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Colors } from '../constants/colors';
+import { useLanguage } from '../contexts/LanguageProvider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -21,44 +22,45 @@ const ONBOARDING_KEY = '@onboarding_complete';
 interface OnboardingSlide {
   id: string;
   icon: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   color: string;
 }
 
-const slides: OnboardingSlide[] = [
+const slidesData: OnboardingSlide[] = [
   {
     id: '1',
     icon: '📍',
-    title: 'Report Incidents',
-    description: 'Quickly report crimes, fires, and disasters to the right authorities with accurate GPS location tagging.',
+    titleKey: 'onboarding.slide1.title',
+    descriptionKey: 'onboarding.slide1.description',
     color: Colors.agencies.pnp,
   },
   {
     id: '2',
     icon: '📸',
-    title: 'Capture Evidence',
-    description: 'Take photos or videos as evidence. Your media is securely uploaded and attached to your report.',
+    titleKey: 'onboarding.slide2.title',
+    descriptionKey: 'onboarding.slide2.description',
     color: Colors.agencies.bfp,
   },
   {
     id: '3',
     icon: '🔔',
-    title: 'Track Status',
-    description: 'Get updates on your reports. Know when officers are assigned and responding to your incident.',
+    titleKey: 'onboarding.slide3.title',
+    descriptionKey: 'onboarding.slide3.description',
     color: Colors.agencies.pdrrmo,
   },
   {
     id: '4',
     icon: '🛡️',
-    title: 'Stay Safe',
-    description: 'Help keep Camarines Norte safe. Your reports help authorities respond faster to emergencies.',
+    titleKey: 'onboarding.slide4.title',
+    descriptionKey: 'onboarding.slide4.description',
     color: Colors.primary,
   },
 ];
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -69,7 +71,7 @@ export default function OnboardingScreen() {
   };
 
   const handleNext = () => {
-    if (currentIndex < slides.length - 1) {
+    if (currentIndex < slidesData.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     } else {
       completeOnboarding();
@@ -86,8 +88,8 @@ export default function OnboardingScreen() {
         <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
           <Text style={styles.icon}>{item.icon}</Text>
         </View>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.description}>{item.description}</Text>
+        <Text style={styles.title}>{t(item.titleKey)}</Text>
+        <Text style={styles.description}>{t(item.descriptionKey)}</Text>
       </View>
     );
   };
@@ -95,7 +97,7 @@ export default function OnboardingScreen() {
   const renderDots = () => {
     return (
       <View style={styles.dotsContainer}>
-        {slides.map((_, index) => {
+        {slidesData.map((_, index) => {
           const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
           
           const dotWidth = scrollX.interpolate({
@@ -118,7 +120,7 @@ export default function OnboardingScreen() {
                 {
                   width: dotWidth,
                   opacity,
-                  backgroundColor: slides[currentIndex].color,
+                  backgroundColor: slidesData[currentIndex].color,
                 },
               ]}
             />
@@ -142,13 +144,13 @@ export default function OnboardingScreen() {
       
       {/* Skip Button */}
       <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-        <Text style={styles.skipText}>Skip</Text>
+        <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
       </TouchableOpacity>
 
       {/* Slides */}
       <Animated.FlatList
         ref={flatListRef}
-        data={slides}
+        data={slidesData}
         renderItem={renderSlide}
         keyExtractor={(item) => item.id}
         horizontal
@@ -168,11 +170,11 @@ export default function OnboardingScreen() {
         {renderDots()}
         
         <TouchableOpacity
-          style={[styles.nextButton, { backgroundColor: slides[currentIndex].color }]}
+          style={[styles.nextButton, { backgroundColor: slidesData[currentIndex].color }]}
           onPress={handleNext}
         >
           <Text style={styles.nextButtonText}>
-            {currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
+            {currentIndex === slidesData.length - 1 ? t('onboarding.getStarted') : t('onboarding.next')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -255,3 +257,4 @@ const styles = StyleSheet.create({
 });
 
 export { ONBOARDING_KEY };
+

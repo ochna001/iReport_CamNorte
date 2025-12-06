@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '../contexts/AuthProvider';
+import { LanguageProvider } from '../contexts/LanguageProvider';
 import { LocationProvider } from '../contexts/LocationProvider';
 import { addNotificationListeners, registerForPushNotifications } from '../lib/notifications';
 import { getQueueCount, setupNetworkListener } from '../lib/offlineQueue';
@@ -88,8 +89,10 @@ function AppContent() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

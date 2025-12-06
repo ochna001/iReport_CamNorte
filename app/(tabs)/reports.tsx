@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,6 +15,7 @@ import {
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useLanguage } from '../../contexts/LanguageProvider';
 import { getQueue, processQueue, QueuedIncident } from '../../lib/offlineQueue';
 import { supabase } from '../../lib/supabase';
 
@@ -31,6 +32,7 @@ interface Incident {
 export default function ReportsScreen() {
   const router = useRouter();
   const { session, isAnonymous, deviceId, isOffline } = useAuth();
+  const { t } = useLanguage();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -357,9 +359,9 @@ export default function ReportsScreen() {
       {incidents.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyTitle}>No Reports Yet</Text>
+          <Text style={styles.emptyTitle}>{t('reports.noReports')}</Text>
           <Text style={styles.emptyText}>
-            You haven't submitted any incident reports. Tap the agency buttons on the home screen to report an incident.
+            {t('reports.noReportsDesc')}
           </Text>
         </View>
       ) : (

@@ -1,17 +1,18 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useLanguage } from '../../contexts/LanguageProvider';
 import { supabase } from '../../lib/supabase';
 
 interface Stats {
@@ -23,6 +24,7 @@ interface Stats {
 export default function HomeScreen() {
   const router = useRouter();
   const { session, isOffline } = useAuth();
+  const { t } = useLanguage();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [showStats, setShowStats] = useState(true);
@@ -176,14 +178,14 @@ export default function HomeScreen() {
           <View style={styles.statsSection}>
             <View style={styles.statsTitleRow}>
               <Text style={styles.sectionTitle}>
-                📊 {statsMode === 'community' ? 'Community' : 'My'} Statistics
+                📊 {statsMode === 'community' ? t('home.stats') : t('reports.title')}
               </Text>
               <TouchableOpacity
                 style={styles.toggleButton}
                 onPress={() => setStatsMode(statsMode === 'community' ? 'personal' : 'community')}
               >
                 <Text style={styles.toggleButtonText}>
-                  {statsMode === 'community' ? '👤 My Stats' : '🌐 Community'}
+                  {statsMode === 'community' ? '👤 ' + t('reports.title') : '🌐 ' + t('home.stats')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -193,11 +195,11 @@ export default function HomeScreen() {
               <View style={styles.statsGrid}>
                 <View style={[styles.statCard, styles.statCardSmall, styles.statCardBlue]}>
                   <Text style={[styles.statNumber, styles.statNumberSmall, styles.statNumberBlue]}>{stats.totalReports.toLocaleString()}</Text>
-                  <Text style={styles.statLabel}>Total{"\n"}Reports</Text>
+                  <Text style={styles.statLabel}>{t('home.totalReports')}</Text>
                 </View>
                 <View style={[styles.statCard, styles.statCardSmall, styles.statCardGreen]}>
                   <Text style={[styles.statNumber, styles.statNumberSmall, styles.statNumberGreen]}>{stats.thisMonth}</Text>
-                  <Text style={styles.statLabel}>This{"\n"}Month</Text>
+                  <Text style={styles.statLabel}>{t('home.pending')}</Text>
                 </View>
                 <View style={[styles.statCard, styles.statCardLarge, styles.statCardPurple]}>
                   <Text style={[styles.statNumber, styles.statNumberLarge, styles.statNumberPurple]}>{stats.avgResponseTime}</Text>
@@ -208,8 +210,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Text style={styles.prompt}>What do you need to report?</Text>
-        <Text style={styles.hintText}>Tap a button below to start your report</Text>
+        <Text style={styles.prompt}>{t('home.reportIncident')}</Text>
+        <Text style={styles.hintText}>{t('home.selectAgency')}</Text>
         
         <View style={styles.buttonContainer}>
           {/* PNP Button */}
@@ -220,8 +222,8 @@ export default function HomeScreen() {
           >
             <View style={styles.buttonContent}>
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Report Crime</Text>
-                <Text style={styles.buttonSubtitle}>Philippine National Police (PNP)</Text>
+                <Text style={styles.buttonTitle}>{t('home.crimeReport')}</Text>
+                <Text style={styles.buttonSubtitle}>{t('home.crimeDesc')}</Text>
               </View>
               <Text style={styles.tapHint}>Tap to report →</Text>
             </View>
@@ -235,8 +237,8 @@ export default function HomeScreen() {
           >
             <View style={styles.buttonContent}>
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Report Fire</Text>
-                <Text style={styles.buttonSubtitle}>Bureau of Fire Protection (BFP)</Text>
+                <Text style={styles.buttonTitle}>{t('home.fireReport')}</Text>
+                <Text style={styles.buttonSubtitle}>{t('home.fireDesc')}</Text>
               </View>
               <Text style={styles.tapHint}>Tap to report →</Text>
             </View>
@@ -250,8 +252,8 @@ export default function HomeScreen() {
           >
             <View style={styles.buttonContent}>
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Report Disaster</Text>
-                <Text style={styles.buttonSubtitle}>Disaster Risk Reduction Management Office</Text>
+                <Text style={styles.buttonTitle}>{t('home.disasterReport')}</Text>
+                <Text style={styles.buttonSubtitle}>{t('home.disasterDesc')}</Text>
               </View>
               <Text style={styles.tapHint}>Tap to report →</Text>
             </View>

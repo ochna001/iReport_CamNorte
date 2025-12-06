@@ -3,8 +3,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
-import { CheckSquare, Eye, EyeOff, Fingerprint, Square } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { CheckSquare, Eye, EyeOff, Fingerprint, Globe, Square } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,11 +20,13 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useLanguage } from '../../contexts/LanguageProvider';
 import { supabase } from '../../lib/supabase';
 
 const LoginScreen = () => {
   const router = useRouter();
   const { enterGuestMode } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +37,7 @@ const LoginScreen = () => {
   const [showGuestAgreement, setShowGuestAgreement] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Check for biometric hardware and if user has enabled it with saved credentials
   useEffect(() => {
@@ -54,14 +57,14 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('login.error'), t('login.fillAllFields'));
       return;
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('login.error'), t('login.invalidEmail'));
       return;
     }
 
@@ -74,7 +77,7 @@ const LoginScreen = () => {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert(t('login.failed'), error.message);
     } else {
       // Save credentials securely if biometric is enabled
       const biometricPref = await AsyncStorage.getItem('biometric_enabled');
@@ -101,7 +104,7 @@ const LoginScreen = () => {
         
         if (!savedEmail || !savedPassword) {
           setLoading(false);
-          Alert.alert('Error', 'No saved credentials found. Please login normally first.');
+          Alert.alert(t('login.error'), t('login.noCredentials'));
           return;
         }
         
@@ -114,7 +117,7 @@ const LoginScreen = () => {
         setLoading(false);
         
         if (error) {
-          Alert.alert('Login Failed', 'Saved credentials are invalid. Please login normally.');
+          Alert.alert(t('login.failed'), t('login.invalidCredentials'));
           // Clear invalid credentials
           await SecureStore.deleteItemAsync('biometric_email');
           await SecureStore.deleteItemAsync('biometric_password');
@@ -123,10 +126,10 @@ const LoginScreen = () => {
           router.replace('/(tabs)');
         }
       } else {
-        Alert.alert('Authentication Failed', 'Biometric authentication was not successful.');
+        Alert.alert(t('login.failed'), t('login.biometricFailed'));
       }
     } catch (e) {
-      Alert.alert('Error', 'Biometric authentication is not available.');
+      Alert.alert(t('login.error'), t('login.biometricUnavailable'));
     }
   };
 
@@ -136,7 +139,7 @@ const LoginScreen = () => {
 
   const handleGuestAccess = async () => {
     if (!agreedToTerms || !agreedToPrivacy) {
-      Alert.alert('Agreement Required', 'Please agree to the Terms of Service and Privacy Policy to continue as guest.');
+      Alert.alert(t('guest.agreementRequired'), t('guest.agreementMessage'));
       return;
     }
 
@@ -147,7 +150,7 @@ const LoginScreen = () => {
       await enterGuestMode();
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to continue as guest. Please try again.');
+      Alert.alert(t('login.error'), t('login.guestError'));
       console.error('Guest mode error:', error);
     } finally {
       setGuestLoading(false);
@@ -166,7 +169,7 @@ const LoginScreen = () => {
 
     if (error) {
       setLoading(false);
-      Alert.alert('Google Login Failed', error.message);
+      Alert.alert(t('login.googleFailed'), error.message);
     } else if (data.url) {
       // Open OAuth URL in browser
       const result = await WebBrowser.openAuthSessionAsync(data.url, 'exp://localhost:8081');
@@ -188,7 +191,7 @@ const LoginScreen = () => {
 
     if (error) {
       setLoading(false);
-      Alert.alert('Facebook Login Failed', error.message);
+      Alert.alert(t('login.facebookFailed'), error.message);
     } else if (data.url) {
       // Open OAuth URL in browser
       const result = await WebBrowser.openAuthSessionAsync(data.url, 'exp://localhost:8081');
@@ -204,6 +207,17 @@ const LoginScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
+      {/* Language Toggle Button */}
+      <TouchableOpacity
+        style={styles.languageButton}
+        onPress={() => setShowLanguageModal(true)}
+      >
+        <Globe size={20} color={Colors.text.secondary} />
+        <Text style={styles.languageButtonText}>
+          {language === 'tl' ? 'TL' : 'EN'}
+        </Text>
+      </TouchableOpacity>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -223,7 +237,7 @@ const LoginScreen = () => {
           <View style={styles.form}>
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder={t('login.email')}
               placeholderTextColor={Colors.text.secondary}
               value={email}
               onChangeText={setEmail}
@@ -235,7 +249,7 @@ const LoginScreen = () => {
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
-                placeholder="Password"
+                placeholder={t('login.password')}
                 placeholderTextColor={Colors.text.secondary}
                 value={password}
                 onChangeText={setPassword}
@@ -262,7 +276,7 @@ const LoginScreen = () => {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <Text style={styles.buttonText}>{t('login.signIn')}</Text>
               )}
             </TouchableOpacity>
 
@@ -271,7 +285,7 @@ const LoginScreen = () => {
               onPress={() => router.push('/screens/SignUpScreen')}
               disabled={loading}
             >
-              <Text style={styles.secondaryButtonText}>Create Account</Text>
+              <Text style={styles.secondaryButtonText}>{t('login.createAccount')}</Text>
             </TouchableOpacity>
 
             {biometricEnabled && (
@@ -281,13 +295,13 @@ const LoginScreen = () => {
                 disabled={loading}
               >
                 <Fingerprint size={20} color={Colors.primary} />
-                <Text style={styles.biometricButtonText}>Login with Biometric</Text>
+                <Text style={styles.biometricButtonText}>{t('login.biometric')}</Text>
               </TouchableOpacity>
             )}
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR </Text>
+              <Text style={styles.dividerText}>{t('login.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -296,7 +310,7 @@ const LoginScreen = () => {
               onPress={handleGoogleLogin}
               disabled={loading}
             >
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
+              <Text style={styles.socialButtonText}>{t('login.continueGoogle')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -304,7 +318,7 @@ const LoginScreen = () => {
               onPress={handleFacebookLogin}
               disabled={loading}
             >
-              <Text style={styles.facebookButtonText}>Continue with Facebook</Text>
+              <Text style={styles.facebookButtonText}>{t('login.continueFacebook')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -315,7 +329,7 @@ const LoginScreen = () => {
               {guestLoading ? (
                 <ActivityIndicator color={Colors.text.secondary} size="small" />
               ) : (
-                <Text style={styles.guestButtonText} numberOfLines={2}> Continue as Guest </Text>
+                <Text style={styles.guestButtonText} numberOfLines={2}>{t('login.continueGuest')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -326,9 +340,9 @@ const LoginScreen = () => {
       {showGuestAgreement && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Guest Access Agreement</Text>
+            <Text style={styles.modalTitle}>{t('guest.title')}</Text>
             <Text style={styles.modalText}>
-              As a guest, your reports will be temporary and lost if you logout. Please agree to our policies to continue.
+              {t('guest.message')}
             </Text>
 
             <View style={styles.agreementContainer}>
@@ -347,19 +361,19 @@ const LoginScreen = () => {
                 )}
                 <View style={styles.checkboxTextContainer}>
                   <Text style={styles.checkboxText}>
-                    I agree to the{' '}
+                    {t('guest.agreeTerms')}{' '}
                     <Text
                       style={styles.linkText}
                       onPress={() => router.push('/screens/TermsOfServiceScreen' as any)}
                     >
-                      Terms of Service
+                      {t('guest.termsOfService')}
                     </Text>
-                    {' '}and{' '}
+                    {' '}{t('guest.and')}{' '}
                     <Text
                       style={styles.linkText}
                       onPress={() => router.push('/screens/PrivacyPolicyScreen' as any)}
                     >
-                      Privacy Policy
+                      {t('guest.privacyPolicy')}
                     </Text>
                   </Text>
                 </View>
@@ -375,7 +389,7 @@ const LoginScreen = () => {
                   setAgreedToPrivacy(false);
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('guest.cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -386,10 +400,68 @@ const LoginScreen = () => {
                 {guestLoading ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.confirmButtonText}>Continue</Text>
+                  <Text style={styles.confirmButtonText}>{t('guest.continue')}</Text>
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      )}
+
+      {/* Language Selection Modal */}
+      {showLanguageModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('language.select')}</Text>
+            
+            <TouchableOpacity
+              style={[
+                styles.languageOption,
+                language === 'tl' && styles.languageOptionSelected,
+              ]}
+              onPress={() => {
+                setLanguage('tl');
+                setShowLanguageModal(false);
+              }}
+            >
+              <Text style={[
+                styles.languageOptionText,
+                language === 'tl' && styles.languageOptionTextSelected,
+              ]}>
+                🇵🇭 {t('language.tagalog')}
+              </Text>
+              {language === 'tl' && (
+                <CheckSquare size={20} color={Colors.primary} />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.languageOption,
+                language === 'en' && styles.languageOptionSelected,
+              ]}
+              onPress={() => {
+                setLanguage('en');
+                setShowLanguageModal(false);
+              }}
+            >
+              <Text style={[
+                styles.languageOptionText,
+                language === 'en' && styles.languageOptionTextSelected,
+              ]}>
+                🇺🇸 {t('language.english')}
+              </Text>
+              {language === 'en' && (
+                <CheckSquare size={20} color={Colors.primary} />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton, { marginTop: 16 }]}
+              onPress={() => setShowLanguageModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>{t('guest.cancel')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -636,6 +708,53 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  languageButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  languageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    marginBottom: 12,
+  },
+  languageOptionSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '10',
+  },
+  languageOptionText: {
+    fontSize: 16,
+    color: Colors.text.primary,
+  },
+  languageOptionTextSelected: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });
 

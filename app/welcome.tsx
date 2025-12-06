@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { CheckSquare, Square } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,10 +15,12 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
+import { useLanguage } from '../contexts/LanguageProvider';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const { enterGuestMode } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [showGuestAgreement, setShowGuestAgreement] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -30,7 +32,7 @@ export default function WelcomeScreen() {
 
   const handleContinueAsGuest = async () => {
     if (!agreedToTerms || !agreedToPrivacy) {
-      Alert.alert('Agreement Required', 'Please agree to the Terms of Service and Privacy Policy to continue as guest.');
+      Alert.alert(t('guest.agreementRequired'), t('guest.agreementMessage'));
       return;
     }
 
@@ -41,7 +43,7 @@ export default function WelcomeScreen() {
       await enterGuestMode();
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to continue as guest. Please try again.');
+      Alert.alert(t('common.error'), t('login.guestError'));
       console.error('Guest mode error:', error);
     } finally {
       setLoading(false);
@@ -90,9 +92,9 @@ export default function WelcomeScreen() {
 
         {/* Welcome Message */}
         <View style={styles.messageContainer}>
-          <Text style={styles.welcomeTitle}>Report Incidents Instantly</Text>
+          <Text style={styles.welcomeTitle}>{t('home.reportIncident')}</Text>
           <Text style={styles.welcomeDescription}>
-            Help keep our community safe by reporting crimes, fires, and disasters to the right authorities.
+            {t('onboarding.slide1.description')}
           </Text>
         </View>
 
@@ -108,8 +110,8 @@ export default function WelcomeScreen() {
               <ActivityIndicator color={Colors.primary} />
             ) : (
               <>
-                <Text style={styles.guestButtonText}>Continue as Guest</Text>
-                <Text style={styles.guestButtonSubtext}>Quick reporting without account</Text>
+                <Text style={styles.guestButtonText}>{t('welcome.continueGuest')}</Text>
+                <Text style={styles.guestButtonSubtext}>{t('guest.message')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -119,7 +121,7 @@ export default function WelcomeScreen() {
             style={styles.loginButton}
             onPress={handleLogin}
           >
-            <Text style={styles.loginButtonText}>Login</Text>
+            <Text style={styles.loginButtonText}>{t('welcome.signIn')}</Text>
           </TouchableOpacity>
 
           {/* Sign Up Link */}
@@ -128,7 +130,7 @@ export default function WelcomeScreen() {
             onPress={handleSignUp}
           >
             <Text style={styles.signUpLinkText}>
-              Don't have an account? <Text style={styles.signUpLinkBold}>Sign Up</Text>
+              {t('signup.alreadyHaveAccount').replace('Sign in', '')} <Text style={styles.signUpLinkBold}>{t('welcome.createAccount')}</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -145,9 +147,9 @@ export default function WelcomeScreen() {
       {showGuestAgreement && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Guest Access Agreement</Text>
+            <Text style={styles.modalTitle}>{t('guest.title')}</Text>
             <Text style={styles.modalText}>
-              As a guest, your reports will be temporary and lost if you logout. Please agree to our policies to continue.
+              {t('guest.message')}
             </Text>
 
             <View style={styles.agreementContainer}>
@@ -194,7 +196,7 @@ export default function WelcomeScreen() {
                   setAgreedToPrivacy(false);
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('guest.cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
+import { useLanguage } from '../contexts/LanguageProvider';
 import { supabase } from '../lib/supabase';
 import LocationCard from './components/LocationCard';
 
@@ -21,6 +22,7 @@ type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 
 const IncidentFormScreen = () => {
   const router = useRouter();
+  const { t } = useLanguage();
   const { agency, mediaUris, latitude, longitude } = useLocalSearchParams<{
     agency: Agency;
     mediaUris: string;

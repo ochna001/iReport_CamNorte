@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Calendar } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -21,11 +21,14 @@ import {
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useLanguage } from '../../contexts/LanguageProvider';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { session, isAnonymous } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -568,8 +571,8 @@ export default function ProfileScreen() {
 
                 <View style={styles.preferenceRow}>
                   <View style={styles.preferenceInfo}>
-                    <Text style={styles.preferenceLabel}>Show Statistics</Text>
-                    <Text style={styles.preferenceDescription}>Display public stats on home screen</Text>
+                    <Text style={styles.preferenceLabel}>{t('profile.showStats')}</Text>
+                    <Text style={styles.preferenceDescription}>{t('profile.showStatsDesc')}</Text>
                   </View>
                   <TouchableOpacity
                     style={[styles.toggle, showHomeStats && styles.toggleActive]}
@@ -579,6 +582,23 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* Language Preference */}
+                <TouchableOpacity 
+                  style={styles.preferenceRow}
+                  onPress={() => setShowLanguageModal(true)}
+                >
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>{t('language.title')}</Text>
+                    <Text style={styles.preferenceDescription}>{t('language.description')}</Text>
+                  </View>
+                  <View style={styles.languageValue}>
+                    <Text style={styles.languageValueText}>
+                      {language === 'tl' ? '🇵🇭 Tagalog' : '🇺🇸 English'}
+                    </Text>
+                    <Text style={styles.chevron}>▶</Text>
+                  </View>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[styles.saveButton, savingPreferences && styles.buttonDisabled]}
                   onPress={handleSavePreferences}
@@ -587,7 +607,7 @@ export default function ProfileScreen() {
                   {savingPreferences ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.saveButtonText}>Save Preferences</Text>
+                    <Text style={styles.saveButtonText}>{t('profile.savePreferences')}</Text>
                   )}
                 </TouchableOpacity>
               </>
@@ -597,15 +617,72 @@ export default function ProfileScreen() {
 
         {/* Sign Out Button */}
         <TouchableOpacity style={styles.signOutButton} onPress={handleLogout}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <Text style={styles.signOutText}>{t('profile.signOut')}</Text>
         </TouchableOpacity>
 
         {/* App Info */}
         <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>iReport Camarines Norte</Text>
-          <Text style={styles.appInfoText}>Version 1.0.0</Text>
+          <Text style={styles.appInfoText}>{t('profile.appInfo')}</Text>
+          <Text style={styles.appInfoText}>{t('profile.version')} 1.0.0</Text>
         </View>
       </ScrollView>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={showLanguageModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLanguageModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('language.select')}</Text>
+            
+            <TouchableOpacity
+              style={[
+                styles.languageOption,
+                language === 'tl' && styles.languageOptionSelected,
+              ]}
+              onPress={() => {
+                setLanguage('tl');
+                setShowLanguageModal(false);
+              }}
+            >
+              <Text style={[
+                styles.languageOptionText,
+                language === 'tl' && styles.languageOptionTextSelected,
+              ]}>
+                🇵🇭 {t('language.tagalog')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.languageOption,
+                language === 'en' && styles.languageOptionSelected,
+              ]}
+              onPress={() => {
+                setLanguage('en');
+                setShowLanguageModal(false);
+              }}
+            >
+              <Text style={[
+                styles.languageOptionText,
+                language === 'en' && styles.languageOptionTextSelected,
+              ]}>
+                🇺🇸 {t('language.english')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowLanguageModal(false)}
+            >
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -964,5 +1041,52 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  languageValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  languageValueText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+  },
+  chevron: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    marginBottom: 12,
+  },
+  languageOptionSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '10',
+  },
+  languageOptionText: {
+    fontSize: 16,
+    color: Colors.text.primary,
+  },
+  languageOptionTextSelected: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  modalCancelButton: {
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: Colors.secondary,
+    marginTop: 8,
+  },
+  modalCancelText: {
+    color: Colors.text.primary,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
