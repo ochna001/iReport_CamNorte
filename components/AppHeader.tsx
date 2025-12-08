@@ -101,6 +101,17 @@ export default function AppHeader() {
     router.push('/notifications');
   };
 
+  const formatDisplayName = (name: string) => {
+    if (!name) return '';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) {
+      return name;
+    }
+    const first = parts[0];
+    const rest = parts.slice(1).join(' ');
+    return `${first}\n${rest}`;
+  };
+
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top + 12, 48) }]}>
       <View style={styles.leftSection}>
@@ -131,8 +142,8 @@ export default function AppHeader() {
             <User2 size={24} color={Colors.text.primary} strokeWidth={2} />
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {displayName}
+            <Text style={styles.userName} numberOfLines={2}>
+              {formatDisplayName(displayName)}
             </Text>
             {isGuest && <Text style={styles.guestLabel}>Guest</Text>}
           </View>
@@ -210,12 +221,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   userInfo: {
-    maxWidth: 140,
+    maxWidth: 100,
+    flexShrink: 1,
   },
   userName: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.text.primary,
+    flexShrink: 1,
   },
   guestLabel: {
     fontSize: 12,

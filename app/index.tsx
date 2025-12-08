@@ -34,14 +34,8 @@ export default function Index() {
     );
   }
 
-  // If user is authenticated, redirect to home
+  // If user is authenticated (real account), redirect to home
   if (session) {
-    return <Redirect href="/(tabs)" />;
-  }
-
-  // If user explicitly entered guest mode before, go to home
-  // Note: isOffline alone should NOT skip onboarding - user must have completed onboarding first
-  if (isGuestMode) {
     return <Redirect href="/(tabs)" />;
   }
 
@@ -50,7 +44,14 @@ export default function Index() {
     return <Redirect href="/onboarding" />;
   }
 
-  // Returning user without session - show welcome screen
+  // If user explicitly entered guest mode AND completed onboarding, go to home
+  // Guest mode is only valid if they actively chose it
+  if (isGuestMode) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  // Returning user without session and not in guest mode - show welcome screen
+  // This handles the case: open app -> don't log in -> close -> reopen
   return <Redirect href="/welcome" />;
 }
 

@@ -3,17 +3,17 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
@@ -27,8 +27,9 @@ type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 const IncidentFormScreen = () => {
   const router = useRouter();
   const { t } = useLanguage();
-  const { agency } = useLocalSearchParams<{
+  const { agency, draftId } = useLocalSearchParams<{
     agency: Agency;
+    draftId?: string;
   }>();
 
   // Use draft context for persisting form data
@@ -208,50 +209,16 @@ const IncidentFormScreen = () => {
   };
 
   const handleBack = () => {
-    // Check if there's any data to save
-    if (hasDraft) {
-      Alert.alert(
-        'Save Draft?',
-        'Would you like to save this report as a draft? You can continue it later from My Reports.',
-        [
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: async () => {
-              await clearDraft();
-              router.back();
-            },
-          },
-          {
-            text: 'Save Draft',
-            onPress: async () => {
-              // Get address for the draft if location is available
-              let address: string | undefined;
-              if (incidentLocation) {
-                try {
-                  const { formatPhilippineAddress, reverseGeocodeWithOSM } = await import('../lib/geocoding');
-                  const result = await reverseGeocodeWithOSM(
-                    incidentLocation.coords.latitude,
-                    incidentLocation.coords.longitude
-                  );
-                  address = formatPhilippineAddress(result.formattedAddress);
-                } catch (e) {
-                  // Ignore geocoding errors
-                }
-              }
-              await saveDraftToList(address);
-              router.back();
-            },
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
-    } else {
-      router.back();
-    }
+    // Save current form data to draft context before going back
+    // This allows data to persist when navigating back to camera screen
+    setDraftName(name);
+    setDraftAge(age);
+    setDraftPhone(phone);
+    setDraftDescription(description);
+    
+    // Simply go back to camera screen - draft context keeps the data
+    // The draft save prompt will appear when leaving camera screen
+    router.back();
   };
 
   const handleSubmit = async () => {
@@ -315,12 +282,15 @@ const IncidentFormScreen = () => {
     setDraftPhone(phone);
     setDraftDescription(description);
 
-    // Navigate to confirmation screen
+    // Navigate to confirmation screen, forwarding draftId when continuing from a saved draft
+    const params: { agency: Agency; draftId?: string } = { agency } as { agency: Agency; draftId?: string };
+    if (draftId) {
+      params.draftId = draftId as string;
+    }
+
     router.push({
       pathname: '/confirm-report',
-      params: {
-        agency,
-      },
+      params,
     });
   };
 

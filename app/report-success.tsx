@@ -11,15 +11,17 @@ import {
     View
 } from 'react-native';
 import { Colors } from '../constants/colors';
+import { useLanguage } from '../contexts/LanguageProvider';
 
 type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 
 const ReportSuccessScreen = () => {
   const router = useRouter();
-  const { incidentId, agency, offline } = useLocalSearchParams<{
+  const { incidentId, agency, offline, assignedStation } = useLocalSearchParams<{
     incidentId: string;
     agency: Agency;
     offline?: string;
+    assignedStation?: string;
   }>();
 
   const isOffline = offline === 'true';
@@ -91,6 +93,16 @@ const ReportSuccessScreen = () => {
           <Text style={styles.trackingHint}>
             {t('success.trackingHint')}
           </Text>
+        </View>
+      )}
+
+      {/* Assigned Station Info */}
+      {!isOffline && assignedStation && (
+        <View style={styles.assignedCard}>
+          <Text style={styles.assignedIcon}>🏢</Text>
+          <Text style={styles.assignedTitle}>{t('success.assignedTo')}</Text>
+          <Text style={styles.assignedStation}>{assignedStation}</Text>
+          <Text style={styles.assignedHint}>{t('success.assignedHint')}</Text>
         </View>
       )}
 
@@ -327,6 +339,36 @@ const styles = StyleSheet.create({
     color: '#78350f',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  assignedCard: {
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#10b981',
+  },
+  assignedIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  assignedTitle: {
+    fontSize: 14,
+    color: '#065f46',
+    marginBottom: 4,
+  },
+  assignedStation: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#047857',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  assignedHint: {
+    fontSize: 12,
+    color: '#065f46',
+    textAlign: 'center',
   },
 });
 

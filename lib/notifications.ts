@@ -4,14 +4,18 @@ import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // Configure how notifications appear when app is in foreground
+// This ensures notifications show in system tray even when app is open
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    // Always show notifications in system tray like other apps
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 // Set up Android notification channel with sound and vibration
@@ -133,6 +137,28 @@ export function addNotificationListeners(
     receivedSubscription.remove();
     responseSubscription.remove();
   };
+}
+
+/**
+ * Update app badge count
+ */
+export async function updateBadgeCount(count: number): Promise<void> {
+  try {
+    await Notifications.setBadgeCountAsync(count);
+  } catch (error) {
+    console.error('[Notifications] Error setting badge count:', error);
+  }
+}
+
+/**
+ * Clear app badge
+ */
+export async function clearBadge(): Promise<void> {
+  try {
+    await Notifications.setBadgeCountAsync(0);
+  } catch (error) {
+    console.error('[Notifications] Error clearing badge:', error);
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,6 +14,7 @@ import {
   View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthProvider';
+import { updateBadgeCount } from '../lib/notifications';
 import { supabase } from '../lib/supabase';
 
 interface Notification {
@@ -53,6 +54,10 @@ export default function NotificationsScreen() {
 
       if (error) throw error;
       setNotifications(data || []);
+      
+      // Update badge count with unread notifications
+      const unreadCount = (data || []).filter(n => !n.is_read).length;
+      await updateBadgeCount(unreadCount);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -67,6 +72,33 @@ export default function NotificationsScreen() {
     }, [session])
   );
 
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const subscription = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          console.log('[Notifications] Real-time update:', payload);
+          // Refresh notifications when changes occur
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [session?.user?.id]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchNotifications();
@@ -80,9 +112,13 @@ export default function NotificationsScreen() {
         .eq('id', id);
         
       if (!error) {
-        setNotifications(prev => 
-          prev.map(n => n.id === id ? { ...n, is_read: true } : n)
-        );
+        setNotifications(prev => {
+          const updated = prev.map(n => n.id === id ? { ...n, is_read: true } : n);
+          // Update badge count immediately
+          const unreadCount = updated.filter(n => !n.is_read).length;
+          updateBadgeCount(unreadCount);
+          return updated;
+        });
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);

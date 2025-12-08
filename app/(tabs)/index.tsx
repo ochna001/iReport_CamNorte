@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
@@ -29,33 +29,23 @@ export default function HomeScreen() {
   const { clearDraft } = useReportDraft();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [showStats, setShowStats] = useState(true);
+  const [showStats, setShowStats] = useState(false); // Hidden by default
   const [statsMode, setStatsMode] = useState<'community' | 'personal'>('community');
 
   useEffect(() => {
-    // Hide stats for guest users
-    if (isAnonymous) {
-      setShowStats(false);
-      setLoadingStats(false);
-      return;
-    }
-    
-    // Check user preference
+    // Check user preference - default to hidden (show_home_stats must be explicitly true)
     const metadata = session?.user?.user_metadata;
-    setShowStats(metadata?.show_home_stats !== false);
+    const shouldShowStats = metadata?.show_home_stats === true;
+    setShowStats(shouldShowStats);
     
-    // Don't fetch stats if offline
-    if (isOffline) {
+    // Don't fetch stats if offline or stats hidden
+    if (isOffline || !shouldShowStats) {
       setLoadingStats(false);
       return;
     }
     
-    if (metadata?.show_home_stats !== false) {
-      fetchStats();
-    } else {
-      setLoadingStats(false);
-    }
-  }, [session, statsMode, isOffline, isAnonymous]);
+    fetchStats();
+  }, [session, statsMode, isOffline]);
 
   const calculateAvgResponseTime = (incidents: any[]): string => {
     if (!incidents || incidents.length === 0) return 'N/A';

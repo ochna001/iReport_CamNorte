@@ -12,6 +12,8 @@ interface ReportDraft {
   media: MediaItem[];
   latitude: number | null;
   longitude: number | null;
+  reporterLatitude: number | null;
+  reporterLongitude: number | null;
   name: string;
   age: string;
   phone: string;
@@ -34,6 +36,7 @@ interface ReportDraftContextType {
   removeMedia: (index: number) => void;
   updateMedia: (index: number, item: MediaItem) => void;
   setLocation: (latitude: number, longitude: number) => void;
+  setReporterLocation: (latitude: number, longitude: number) => void;
   setName: (name: string) => void;
   setAge: (age: string) => void;
   setPhone: (phone: string) => void;
@@ -53,6 +56,8 @@ const emptyDraft: ReportDraft = {
   media: [],
   latitude: null,
   longitude: null,
+  reporterLatitude: null,
+  reporterLongitude: null,
   name: '',
   age: '',
   phone: '',
@@ -69,6 +74,7 @@ const ReportDraftContext = createContext<ReportDraftContextType>({
   removeMedia: () => {},
   updateMedia: () => {},
   setLocation: () => {},
+  setReporterLocation: () => {},
   setName: () => {},
   setAge: () => {},
   setPhone: () => {},
@@ -191,6 +197,15 @@ export const ReportDraftProvider = ({ children }: { children: React.ReactNode })
     }));
   };
 
+  const setReporterLocation = (latitude: number, longitude: number) => {
+    setDraft(prev => ({
+      ...prev,
+      reporterLatitude: latitude,
+      reporterLongitude: longitude,
+      createdAt: prev.createdAt || Date.now(),
+    }));
+  };
+
   const setName = (name: string) => {
     setDraft(prev => ({ ...prev, name }));
   };
@@ -274,6 +289,7 @@ export const ReportDraftProvider = ({ children }: { children: React.ReactNode })
         removeMedia,
         updateMedia,
         setLocation,
+        setReporterLocation,
         setName,
         setAge,
         setPhone,

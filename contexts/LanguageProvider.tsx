@@ -79,6 +79,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.loading': 'Naglo-load...',
     'common.required': 'Kinakailangan',
     'common.logout': 'Mag-logout',
+    'common.confirm': 'Kumpirma',
 
     // Welcome Screen
     'welcome.title': 'Mabuhay!',
@@ -143,6 +144,8 @@ const translations: Record<Language, Record<string, string>> = {
     'reports.filter.pending': 'Pending',
     'reports.filter.active': 'Active',
     'reports.filter.resolved': 'Closed',
+    'reports.deleteQueuedTitle': 'Tanggalin ang Queued Report?',
+    'reports.deleteQueuedMessage': 'Ang report na ito ay hindi pa naisusumite. Sigurado ka bang gusto mong tanggalin ito?',
 
     // Profile Screen
     'profile.title': 'Profile',
@@ -184,6 +187,8 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.selectYear': '📅 Pumili ng Taon',
     'profile.selectMonth': '📆 Pumili ng Buwan',
     'profile.selectDay': '📍 Pumili ng Araw',
+    'profile.exitGuest': 'Lumabas sa Guest Mode',
+    'profile.exitGuestMessage': 'Sigurado ka bang gusto mong lumabas sa guest mode?',
 
     // Incident Form
     'form.crimeReport': 'Report ng Krimen',
@@ -269,6 +274,14 @@ const translations: Record<Language, Record<string, string>> = {
     'camera.mediaRequiredMessage': 'Pakikuha ng kahit isang litrato o video bilang ebidensya bago magpatuloy.',
     'camera.locationRequired': 'Kailangan ng Lokasyon',
     'camera.locationRequiredMessage': 'Pakihintay na makuha ang iyong lokasyon bago magpatuloy.',
+    'camera.saveDraftTitle': 'I-save bilang Draft?',
+    'camera.saveDraftMessage': 'Gusto mo bang i-save ang report na ito bilang draft? Maaari mo itong ipagpatuloy mamaya mula sa Aking mga Report.',
+    'camera.saveDraft': 'I-save ang Draft',
+    'camera.discard': 'Itapon',
+
+    // Incident Details
+    'details.incidentLocation': '🚨 Lokasyon ng Insidente',
+    'details.reporterLocation': '📍 Lokasyon ng Nag-ulat',
 
     // Confirm Report
     'confirm.title': 'Kumpirmahin ang Report',
@@ -301,6 +314,9 @@ const translations: Record<Language, Record<string, string>> = {
     'confirm.rateLimitMessage': 'Maaari ka lang magsumite ng 5 report bawat oras. Pakisubukan ulit mamaya.',
     'confirm.invalidData': 'Hindi Valid na Data',
     'confirm.contentTooLong': 'Masyadong Mahaba ang Nilalaman',
+    'confirm.duplicateTitle': 'Posibleng Duplicate na Report',
+    'confirm.duplicateMessage': 'May katulad na report na naisumite mula sa parehong lokasyon kamakailan. Sigurado ka bang gusto mong isumite ito?',
+    'confirm.submitAnyway': 'Isumite Pa Rin',
 
     // Report Success
     'success.title': 'Naisubmit na ang Report!',
@@ -318,6 +334,8 @@ const translations: Record<Language, Record<string, string>> = {
     'success.goHome': 'Bumalik sa Home',
     'success.viewReports': 'Tingnan ang Aking mga Report',
     'success.emergencyNote': '🚨 Sa kaso ng emergency, direktang tumawag sa hotline',
+    'success.assignedTo': 'Naka-assign sa',
+    'success.assignedHint': 'Ang pinakamalapit na istasyon ay awtomatikong na-notify',
 
     // Tabs
     'tabs.home': 'Home',
@@ -331,7 +349,7 @@ const translations: Record<Language, Record<string, string>> = {
     'login.signIn': 'Sign In',
     'login.createAccount': 'Create Account',
     'login.biometric': 'Login with Biometric',
-    'login.or': 'OR',
+    'login.or': 'OR ',
     'login.continueGoogle': 'Continue with Google',
     'login.continueFacebook': 'Continue with Facebook',
     'login.continueGuest': 'Continue as Guest',
@@ -390,6 +408,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.loading': 'Loading...',
     'common.required': 'Required',
     'common.logout': 'Logout',
+    'common.confirm': 'Confirm',
 
     // Welcome Screen
     'welcome.title': 'Welcome!',
@@ -454,6 +473,8 @@ const translations: Record<Language, Record<string, string>> = {
     'reports.filter.pending': 'Pending',
     'reports.filter.active': 'Active',
     'reports.filter.resolved': 'Resolved',
+    'reports.deleteQueuedTitle': 'Delete Queued Report?',
+    'reports.deleteQueuedMessage': 'This report has not been submitted yet. Are you sure you want to delete it?',
 
     // Profile Screen
     'profile.title': 'Profile',
@@ -495,6 +516,8 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.selectYear': '📅 Select Year',
     'profile.selectMonth': '📆 Select Month',
     'profile.selectDay': '📍 Select Day',
+    'profile.exitGuest': 'Exit Guest Mode',
+    'profile.exitGuestMessage': 'Are you sure you want to exit guest mode?',
 
     // Incident Form
     'form.crimeReport': 'Crime Report',
@@ -580,6 +603,14 @@ const translations: Record<Language, Record<string, string>> = {
     'camera.mediaRequiredMessage': 'Please take at least one photo or video as evidence before continuing.',
     'camera.locationRequired': 'Location Required',
     'camera.locationRequiredMessage': 'Please wait for your location to be detected before continuing.',
+    'camera.saveDraftTitle': 'Save as Draft?',
+    'camera.saveDraftMessage': 'Would you like to save this report as a draft? You can continue it later from My Reports.',
+    'camera.saveDraft': 'Save Draft',
+    'camera.discard': 'Discard',
+
+    // Incident Details
+    'details.incidentLocation': '🚨 Incident Location',
+    'details.reporterLocation': '📍 Reporter Location',
 
     // Confirm Report
     'confirm.title': 'Confirm Report',
@@ -612,6 +643,9 @@ const translations: Record<Language, Record<string, string>> = {
     'confirm.rateLimitMessage': 'You can only submit 5 reports per hour. Please try again later.',
     'confirm.invalidData': 'Invalid Data',
     'confirm.contentTooLong': 'Content Too Long',
+    'confirm.duplicateTitle': 'Possible Duplicate Report',
+    'confirm.duplicateMessage': 'A similar report was recently submitted from the same location. Are you sure you want to submit this?',
+    'confirm.submitAnyway': 'Submit Anyway',
 
     // Report Success
     'success.title': 'Report Submitted!',
@@ -629,6 +663,8 @@ const translations: Record<Language, Record<string, string>> = {
     'success.goHome': 'Return to Home',
     'success.viewReports': 'View My Reports',
     'success.emergencyNote': '🚨 In case of immediate emergency, please call the hotline directly',
+    'success.assignedTo': 'Assigned to',
+    'success.assignedHint': 'The nearest station has been automatically notified',
 
     // Tabs
     'tabs.home': 'Home',

@@ -1,22 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { Calendar } from 'lucide-react-native';
+import { Calendar, CheckSquare } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import { Colors } from '../../constants/colors';
@@ -26,7 +26,7 @@ import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { session, isAnonymous } = useAuth();
+  const { session, isAnonymous, isGuestMode } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,8 +41,8 @@ export default function ProfileScreen() {
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [pickerStep, setPickerStep] = useState<'year' | 'month' | 'day'>('year');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showHomeStats, setShowHomeStats] = useState(true);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [showHomeStats, setShowHomeStats] = useState(false); // Hidden by default
+  const [biometricEnabled, setBiometricEnabled] = useState(true); // On by default
   const [personalDetailsExpanded, setPersonalDetailsExpanded] = useState(true);
   const [preferencesExpanded, setPreferencesExpanded] = useState(true);
   const [savingPreferences, setSavingPreferences] = useState(false);
@@ -75,16 +75,22 @@ export default function ProfileScreen() {
         if (data.date_of_birth) {
           setDateOfBirth(new Date(data.date_of_birth));
         }
-        // Get preferences from metadata
+        // Get preferences from metadata - default to hidden (must be explicitly true)
         const metadata = session?.user?.user_metadata;
-        setShowHomeStats(metadata?.show_home_stats !== false);
+        setShowHomeStats(metadata?.show_home_stats === true);
+        setNotificationsEnabled(metadata?.notifications_enabled !== false);
       } else {
         setEmail(session?.user?.email || '');
       }
       
-      // Load biometric preference
+      // Load biometric preference - default ON if not set yet
       const biometricPref = await AsyncStorage.getItem('biometric_enabled');
-      setBiometricEnabled(biometricPref === 'true');
+      if (biometricPref === null) {
+        await AsyncStorage.setItem('biometric_enabled', 'true');
+        setBiometricEnabled(true);
+      } else {
+        setBiometricEnabled(biometricPref === 'true');
+      }
     } catch (error: any) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -242,6 +248,7 @@ export default function ProfileScreen() {
       await supabase.auth.updateUser({
         data: {
           show_home_stats: showHomeStats,
+          notifications_enabled: notificationsEnabled,
         }
       });
 
@@ -263,8 +270,27 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = () => {
-    // Different message for guest vs authenticated users
+  const handleLogout = async () => {
+    // For guest mode without session, just clear guest mode and redirect
+    if (isGuestMode && !session) {
+      Alert.alert(
+        t('profile.exitGuest') || 'Exit Guest Mode',
+        t('profile.exitGuestMessage') || 'Are you sure you want to exit guest mode?',
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.confirm') || 'Confirm',
+            onPress: async () => {
+              await AsyncStorage.removeItem('@guest_mode');
+              router.replace('/screens/LoginScreen');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    // Different message for anonymous vs authenticated users
     const title = isAnonymous ? '⚠️ Logout as Guest' : 'Logout';
     const message = isAnonymous 
       ? 'Your reports will be permanently lost if you logout. Guest accounts cannot be recovered. Are you sure?'
@@ -274,12 +300,13 @@ export default function ProfileScreen() {
       title,
       message,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             await supabase.auth.signOut();
+            await AsyncStorage.removeItem('@guest_mode');
             router.replace('/screens/LoginScreen');
           },
         },
@@ -321,21 +348,42 @@ export default function ProfileScreen() {
         }
       >
 
-        {/* Anonymous User Upgrade Prompt */}
-        {isAnonymous && (
+        {/* Guest/Anonymous User Upgrade Prompt */}
+        {(isAnonymous || isGuestMode) && (
           <View style={styles.upgradeCard}>
-            <Text style={styles.upgradeTitle}>⚠️ Guest Account</Text>
+            <Text style={styles.upgradeTitle}>{t('profile.guestAccount')}</Text>
             <Text style={styles.upgradeText}>
-              You're using a temporary guest account. Your reports will be lost if you logout or close the app. Create an account to save your reports permanently and receive updates.
+              {t('profile.guestWarning')}
             </Text>
             <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgradeAccount}>
-              <Text style={styles.upgradeButtonText}>Create Account</Text>
+              <Text style={styles.upgradeButtonText} numberOfLines={1} adjustsFontSizeToFit>{t('profile.createAccount')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Profile Form */}
-        {!isAnonymous && (
+        {/* Guest Language Preference - show for guests so they can change language */}
+        {(isAnonymous || isGuestMode) && (
+          <View style={styles.formContainer}>
+            <TouchableOpacity 
+              style={styles.preferenceRow}
+              onPress={() => setShowLanguageModal(true)}
+            >
+              <View style={styles.preferenceInfo}>
+                <Text style={styles.preferenceLabel}>{t('language.title')}</Text>
+                <Text style={styles.preferenceDescription}>{t('language.description')}</Text>
+              </View>
+              <View style={styles.languageValue}>
+                <Text style={styles.languageValueText}>
+                  {language === 'tl' ? '🇵🇭 Tagalog' : '🇺🇸 English'}
+                </Text>
+                <Text style={styles.chevron}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Profile Form - only for authenticated non-anonymous users */}
+        {!isAnonymous && !isGuestMode && (
           <View style={styles.formContainer}>
             {/* Personal Details Section */}
             <TouchableOpacity 
@@ -635,50 +683,70 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowLanguageModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('language.select')}</Text>
+          <View style={styles.languageModalContent}>
+            <Text style={styles.languageModalTitle}>{t('language.select')}</Text>
+            
+            <View style={styles.languageOptionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'tl' && styles.languageOptionSelected,
+                ]}
+                onPress={() => {
+                  setLanguage('tl');
+                  setShowLanguageModal(false);
+                }}
+              >
+                <View style={styles.languageOptionContent}>
+                  <Text style={styles.languageFlag}>🇵🇭</Text>
+                  <View style={styles.languageTextContainer}>
+                    <Text style={[
+                      styles.languageOptionText,
+                      language === 'tl' && styles.languageOptionTextSelected,
+                    ]}>
+                      {t('language.tagalog')}
+                    </Text>
+                    <Text style={styles.languageSubtext}>Filipino / Tagalog</Text>
+                  </View>
+                </View>
+                {language === 'tl' && (
+                  <CheckSquare size={22} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'en' && styles.languageOptionSelected,
+                ]}
+                onPress={() => {
+                  setLanguage('en');
+                  setShowLanguageModal(false);
+                }}
+              >
+                <View style={styles.languageOptionContent}>
+                  <Text style={styles.languageFlag}>🇺🇸</Text>
+                  <View style={styles.languageTextContainer}>
+                    <Text style={[
+                      styles.languageOptionText,
+                      language === 'en' && styles.languageOptionTextSelected,
+                    ]}>
+                      {t('language.english')}
+                    </Text>
+                    <Text style={styles.languageSubtext}>English (US)</Text>
+                  </View>
+                </View>
+                {language === 'en' && (
+                  <CheckSquare size={22} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            </View>
             
             <TouchableOpacity
-              style={[
-                styles.languageOption,
-                language === 'tl' && styles.languageOptionSelected,
-              ]}
-              onPress={() => {
-                setLanguage('tl');
-                setShowLanguageModal(false);
-              }}
-            >
-              <Text style={[
-                styles.languageOptionText,
-                language === 'tl' && styles.languageOptionTextSelected,
-              ]}>
-                🇵🇭 {t('language.tagalog')}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.languageOption,
-                language === 'en' && styles.languageOptionSelected,
-              ]}
-              onPress={() => {
-                setLanguage('en');
-                setShowLanguageModal(false);
-              }}
-            >
-              <Text style={[
-                styles.languageOptionText,
-                language === 'en' && styles.languageOptionTextSelected,
-              ]}>
-                🇺🇸 {t('language.english')}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.modalCancelButton}
+              style={styles.languageCloseButton}
               onPress={() => setShowLanguageModal(false)}
             >
-              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+              <Text style={styles.languageCloseButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1055,27 +1123,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text.secondary,
   },
+  languageModalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  languageModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  languageOptionsContainer: {
+    gap: 12,
+  },
   languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: Colors.secondary,
-    marginBottom: 12,
+    backgroundColor: Colors.background,
   },
   languageOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.primary + '08',
+  },
+  languageOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  languageFlag: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  languageTextContainer: {
+    flex: 1,
   },
   languageOptionText: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '600',
     color: Colors.text.primary,
   },
   languageOptionTextSelected: {
     color: Colors.primary,
+  },
+  languageSubtext: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  languageCloseButton: {
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+  },
+  languageCloseButtonText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: Colors.text.primary,
   },
   modalCancelButton: {
     padding: 14,

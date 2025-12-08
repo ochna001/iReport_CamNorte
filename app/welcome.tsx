@@ -100,6 +100,14 @@ export default function WelcomeScreen() {
 
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
+          {/* Login Button */}
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={handleLogin}
+          >
+            <Text style={styles.loginButtonText}>{t('welcome.signIn')}</Text>
+          </TouchableOpacity>
+
           {/* Continue as Guest */}
           <TouchableOpacity 
             style={[styles.guestButton, loading && styles.buttonDisabled]}
@@ -110,18 +118,10 @@ export default function WelcomeScreen() {
               <ActivityIndicator color={Colors.primary} />
             ) : (
               <>
-                <Text style={styles.guestButtonText}>{t('welcome.continueGuest')}</Text>
+                <Text style={styles.guestButtonText} numberOfLines={1} adjustsFontSizeToFit>{t('welcome.continueGuest')}</Text>
                 <Text style={styles.guestButtonSubtext}>{t('guest.message')}</Text>
               </>
             )}
-          </TouchableOpacity>
-
-          {/* Login Button */}
-          <TouchableOpacity 
-            style={styles.loginButton}
-            onPress={handleLogin}
-          >
-            <Text style={styles.loginButtonText}>{t('welcome.signIn')}</Text>
           </TouchableOpacity>
 
           {/* Sign Up Link */}
@@ -129,8 +129,8 @@ export default function WelcomeScreen() {
             style={styles.signUpLink}
             onPress={handleSignUp}
           >
-            <Text style={styles.signUpLinkText}>
-              {t('signup.alreadyHaveAccount').replace('Sign in', '')} <Text style={styles.signUpLinkBold}>{t('welcome.createAccount')}</Text>
+            <Text style={styles.signUpLinkBold}>
+              {t('welcome.createAccount')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -310,10 +310,13 @@ const styles = StyleSheet.create({
   signUpLinkText: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
   signUpLinkBold: {
     fontWeight: 'bold',
     textDecorationLine: 'underline',
+      color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
   footer: {
     fontSize: 13,

@@ -5,15 +5,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Camera } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useLanguage } from '../contexts/LanguageProvider';
@@ -39,7 +39,7 @@ const CameraScreen = () => {
   const { location: globalLocation, loading: locationLoading, permissionDenied, refreshLocation } = useLocation();
   
   // Use draft context for persisting media and form data
-  const { draft, setAgency, setMedia: setDraftMedia, addMedia: addDraftMedia, removeMedia: removeDraftMedia, updateMedia: updateDraftMedia, setLocation: setDraftLocation } = useReportDraft();
+  const { draft, setAgency, setMedia: setDraftMedia, addMedia: addDraftMedia, removeMedia: removeDraftMedia, updateMedia: updateDraftMedia, setLocation: setDraftLocation, setReporterLocation: setDraftReporterLocation, hasDraft, clearDraft, saveDraftToList } = useReportDraft();
   
   // Local state for location (can be edited by user)
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -170,8 +170,13 @@ const CameraScreen = () => {
       return;
     }
 
-    // Save location to draft
+    // Save incident location to draft (this is the editable location)
     setDraftLocation(location.coords.latitude, location.coords.longitude);
+    
+    // Save reporter's original location (non-editable, for audit purposes)
+    if (globalLocation) {
+      setDraftReporterLocation(globalLocation.coords.latitude, globalLocation.coords.longitude);
+    }
 
     // Navigate to incident form (data is already in draft context)
     router.push({
@@ -208,11 +213,58 @@ const CameraScreen = () => {
     }
   };
 
+  const handleBack = () => {
+    // Check if there's any data to save (media or form data)
+    if (hasDraft) {
+      Alert.alert(
+        t('camera.saveDraftTitle'),
+        t('camera.saveDraftMessage'),
+        [
+          {
+            text: t('camera.discard'),
+            style: 'destructive',
+            onPress: async () => {
+              await clearDraft();
+              router.back();
+            },
+          },
+          {
+            text: t('camera.saveDraft'),
+            onPress: async () => {
+              // Get address for the draft if location is available
+              let address: string | undefined;
+              if (location) {
+                try {
+                  const { formatPhilippineAddress, reverseGeocodeWithOSM } = await import('../lib/geocoding');
+                  const result = await reverseGeocodeWithOSM(
+                    location.coords.latitude,
+                    location.coords.longitude
+                  );
+                  address = formatPhilippineAddress(result.formattedAddress);
+                } catch (e) {
+                  // Ignore geocoding errors
+                }
+              }
+              await saveDraftToList(address);
+              router.back();
+            },
+          },
+          {
+            text: t('common.cancel'),
+            style: 'cancel',
+          },
+        ]
+      );
+    } else {
+      router.back();
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: getAgencyColor() }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{getAgencyName()}</Text>
@@ -245,15 +297,23 @@ const CameraScreen = () => {
           />
         )}
 
-        {/* Instructions - only show if no media yet */}
-        {media.length === 0 && (
-          <View style={styles.instructionCard}>
-            <Text style={styles.instructionTitle}>{t('camera.title')}</Text>
-            <Text style={styles.instructionText}>
-              {t('camera.subtitle')}
-            </Text>
-          </View>
-        )}
+        {/* Instructions - show requirement notice */}
+        <View style={styles.instructionCard}>
+          <Text style={styles.instructionTitle}>
+            {media.length === 0 ? '📸 ' + t('camera.title') : '✅ ' + t('camera.capturedMedia')}
+          </Text>
+          <Text style={styles.instructionText}>
+            {media.length === 0 
+              ? t('camera.subtitle') + '\n\n⚠️ At least one photo or video is required to continue.'
+              : `${media.length} file(s) captured. You can add more or continue to the form.`
+            }
+          </Text>
+          {media.length === 0 && (
+            <View style={styles.requiredBadge}>
+              <Text style={styles.requiredBadgeText}>Required</Text>
+            </View>
+          )}
+        </View>
 
         {/* Media Preview */}
         {media.length > 0 && (
@@ -479,17 +539,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
   },
   instructionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: 8,
   },
   instructionText: {
     fontSize: 14,
     color: Colors.text.secondary,
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  requiredBadge: {
+    backgroundColor: Colors.warning + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  requiredBadgeText: {
+    color: Colors.warning,
+    fontSize: 12,
+    fontWeight: '700',
   },
   mediaSection: {
     marginBottom: 24,

@@ -195,15 +195,45 @@ const SignUpScreen = () => {
 
     setLoading(true);
 
-    // Step 1: Create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password: password,
-    });
+    try {
+      // Check for duplicate phone number in profiles
+      const { data: existingPhone, error: phoneCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone_number', cleanedPhone)
+        .maybeSingle();
 
-    if (authError) {
+      if (phoneCheckError) {
+        console.error('Error checking phone number:', phoneCheckError);
+      }
+
+      if (existingPhone) {
+        setLoading(false);
+        Alert.alert('Phone Number Already Registered', 'This phone number is already associated with an account. Please use a different number or try logging in.');
+        return;
+      }
+
+      // Step 1: Create auth user (Supabase will check for duplicate email)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (authError) {
+        setLoading(false);
+        // Handle specific duplicate email error
+        if (authError.message.toLowerCase().includes('already registered') || 
+            authError.message.toLowerCase().includes('already exists')) {
+          Alert.alert('Email Already Registered', 'This email is already associated with an account. Please try logging in or use a different email.');
+        } else {
+          Alert.alert('Sign Up Failed', authError.message);
+        }
+        return;
+      }
+    } catch (error) {
       setLoading(false);
-      Alert.alert('Sign Up Failed', authError.message);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      console.error('Sign up error:', error);
       return;
     }
 
@@ -232,6 +262,7 @@ const SignUpScreen = () => {
               displayName: displayName.trim(),
               dateOfBirth: dateOfBirth.toISOString().split('T')[0],
               phoneNumber: phoneNumber.replace(/\D/g, ''),
+              password: password, // Pass for biometric setup
             },
           }),
         },

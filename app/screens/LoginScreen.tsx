@@ -18,10 +18,36 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useLanguage } from '../../contexts/LanguageProvider';
 import { supabase } from '../../lib/supabase';
+
+// Complete any pending auth session from the browser
+WebBrowser.maybeCompleteAuthSession();
+
+// Google Icon Component
+const GoogleIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24">
+    <Path
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      fill="#4285F4"
+    />
+    <Path
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      fill="#34A853"
+    />
+    <Path
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      fill="#FBBC05"
+    />
+    <Path
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      fill="#EA4335"
+    />
+  </Svg>
+);
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -80,10 +106,15 @@ const LoginScreen = () => {
       Alert.alert(t('login.failed'), error.message);
     } else {
       // Save credentials securely if biometric is enabled
+      // On fresh install, biometric_enabled is null, so default to true
       const biometricPref = await AsyncStorage.getItem('biometric_enabled');
-      if (biometricPref === 'true') {
+      if (biometricPref === 'true' || biometricPref === null) {
         await SecureStore.setItemAsync('biometric_email', email.trim());
         await SecureStore.setItemAsync('biometric_password', password);
+        // Set the default if not set yet
+        if (biometricPref === null) {
+          await AsyncStorage.setItem('biometric_enabled', 'true');
+        }
       }
       router.replace('/(tabs)');
     }
@@ -160,44 +191,97 @@ const LoginScreen = () => {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    
+    // For Expo Go: Use the Supabase project URL as redirect, then handle in-app
+    // For production builds: Use native scheme ireportv1://auth/callback
+    const isExpoGo = !__DEV__ ? false : true; // Simplified check
+    
+    // In Expo Go, we'll use a workaround: redirect to Supabase and let it handle
+    const redirectUrl = isExpoGo 
+      ? 'ireportv1://auth/callback'  // Native scheme (works in dev builds)
+      : 'ireportv1://auth/callback';
+    
+    console.log('[Login] 1. Using Redirect URL:', redirectUrl);
+    console.log('[Login] Note: Google OAuth works best in development/production builds, not Expo Go');
+    
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'exp://localhost:8081', // Update for production
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
       },
     });
 
     if (error) {
+      console.error('[Login] Supabase init error:', error);
       setLoading(false);
       Alert.alert(t('login.googleFailed'), error.message);
-    } else if (data.url) {
-      // Open OAuth URL in browser
-      const result = await WebBrowser.openAuthSessionAsync(data.url, 'exp://localhost:8081');
-      setLoading(false);
-      if (result.type === 'success') {
-        router.replace('/(tabs)');
-      }
+      return;
     }
-  };
-
-  const handleFacebookLogin = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'facebook',
-      options: {
-        redirectTo: 'exp://localhost:8081', // Update for production
-      },
-    });
-
-    if (error) {
-      setLoading(false);
-      Alert.alert(t('login.facebookFailed'), error.message);
-    } else if (data.url) {
-      // Open OAuth URL in browser
-      const result = await WebBrowser.openAuthSessionAsync(data.url, 'exp://localhost:8081');
-      setLoading(false);
-      if (result.type === 'success') {
-        router.replace('/(tabs)');
+    
+    if (data.url) {
+      console.log('[Login] 2. Opening WebBrowser with URL:', data.url);
+      try {
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+        console.log('[Login] 3. WebBrowser Result:', JSON.stringify(result));
+        
+        setLoading(false);
+        
+        if (result.type === 'success' && result.url) {
+          console.log('[Login] 4. Success redirect URL:', result.url);
+          const url = result.url;
+          
+          // Parse tokens from URL hash fragment
+          const hashIndex = url.indexOf('#');
+          if (hashIndex > -1) {
+            const hash = url.substring(hashIndex + 1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            
+            if (accessToken && refreshToken) {
+              console.log('[Login] 5. Found tokens in hash, setting session...');
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              
+              if (sessionError) {
+                console.error('[Login] Session error:', sessionError);
+                Alert.alert('Error', sessionError.message);
+              } else {
+                console.log('[Login] 6. Session set, redirecting to tabs');
+                router.replace('/(tabs)');
+              }
+              return;
+            }
+          }
+          
+          // Check for code in query params
+          if (url.includes('code=')) {
+            const urlObj = new URL(url);
+            const code = urlObj.searchParams.get('code');
+            if (code) {
+              console.log('[Login] 5. Found code, exchanging...');
+              const { error: codeError } = await supabase.auth.exchangeCodeForSession(code);
+              if (codeError) {
+                console.error('[Login] Code exchange error:', codeError);
+                Alert.alert('Error', codeError.message);
+              } else {
+                console.log('[Login] 6. Code exchanged, redirecting to tabs');
+                router.replace('/(tabs)');
+              }
+              return;
+            }
+          }
+          
+          console.log('[Login] 5. No tokens/code found in URL');
+        } else {
+          console.log('[Login] WebBrowser did not return success type:', result.type);
+        }
+      } catch (e) {
+        console.error('[Login] WebBrowser exception:', e);
+        setLoading(false);
       }
     }
   };
@@ -285,7 +369,7 @@ const LoginScreen = () => {
               onPress={() => router.push('/screens/SignUpScreen')}
               disabled={loading}
             >
-              <Text style={styles.secondaryButtonText}>{t('login.createAccount')}</Text>
+              <Text style={styles.secondaryButtonText} numberOfLines={1} adjustsFontSizeToFit>{t('login.createAccount')}</Text>
             </TouchableOpacity>
 
             {biometricEnabled && (
@@ -310,15 +394,10 @@ const LoginScreen = () => {
               onPress={handleGoogleLogin}
               disabled={loading}
             >
-              <Text style={styles.socialButtonText}>{t('login.continueGoogle')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.facebookButton]}
-              onPress={handleFacebookLogin}
-              disabled={loading}
-            >
-              <Text style={styles.facebookButtonText}>{t('login.continueFacebook')}</Text>
+              <View style={styles.googleButtonContent}>
+                <GoogleIcon />
+                <Text style={styles.socialButtonText}>{t('login.continueGoogle')}</Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -329,7 +408,7 @@ const LoginScreen = () => {
               {guestLoading ? (
                 <ActivityIndicator color={Colors.text.secondary} size="small" />
               ) : (
-                <Text style={styles.guestButtonText} numberOfLines={2}>{t('login.continueGuest')}</Text>
+                <Text style={styles.guestButtonText} numberOfLines={1} adjustsFontSizeToFit>{t('login.continueGuest')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -411,56 +490,70 @@ const LoginScreen = () => {
       {/* Language Selection Modal */}
       {showLanguageModal && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('language.select')}</Text>
+          <View style={styles.languageModalContent}>
+            <Text style={styles.languageModalTitle}>{t('language.select')}</Text>
+            
+            <View style={styles.languageOptionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'tl' && styles.languageOptionSelected,
+                ]}
+                onPress={() => {
+                  setLanguage('tl');
+                  setShowLanguageModal(false);
+                }}
+              >
+                <View style={styles.languageOptionContent}>
+                  <Text style={styles.languageFlag}>🇵🇭</Text>
+                  <View style={styles.languageTextContainer}>
+                    <Text style={[
+                      styles.languageOptionText,
+                      language === 'tl' && styles.languageOptionTextSelected,
+                    ]}>
+                      {t('language.tagalog')}
+                    </Text>
+                    <Text style={styles.languageSubtext}>Filipino / Tagalog</Text>
+                  </View>
+                </View>
+                {language === 'tl' && (
+                  <CheckSquare size={22} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'en' && styles.languageOptionSelected,
+                ]}
+                onPress={() => {
+                  setLanguage('en');
+                  setShowLanguageModal(false);
+                }}
+              >
+                <View style={styles.languageOptionContent}>
+                  <Text style={styles.languageFlag}>🇺🇸</Text>
+                  <View style={styles.languageTextContainer}>
+                    <Text style={[
+                      styles.languageOptionText,
+                      language === 'en' && styles.languageOptionTextSelected,
+                    ]}>
+                      {t('language.english')}
+                    </Text>
+                    <Text style={styles.languageSubtext}>English (US)</Text>
+                  </View>
+                </View>
+                {language === 'en' && (
+                  <CheckSquare size={22} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            </View>
             
             <TouchableOpacity
-              style={[
-                styles.languageOption,
-                language === 'tl' && styles.languageOptionSelected,
-              ]}
-              onPress={() => {
-                setLanguage('tl');
-                setShowLanguageModal(false);
-              }}
-            >
-              <Text style={[
-                styles.languageOptionText,
-                language === 'tl' && styles.languageOptionTextSelected,
-              ]}>
-                🇵🇭 {t('language.tagalog')}
-              </Text>
-              {language === 'tl' && (
-                <CheckSquare size={20} color={Colors.primary} />
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.languageOption,
-                language === 'en' && styles.languageOptionSelected,
-              ]}
-              onPress={() => {
-                setLanguage('en');
-                setShowLanguageModal(false);
-              }}
-            >
-              <Text style={[
-                styles.languageOptionText,
-                language === 'en' && styles.languageOptionTextSelected,
-              ]}>
-                🇺🇸 {t('language.english')}
-              </Text>
-              {language === 'en' && (
-                <CheckSquare size={20} color={Colors.primary} />
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton, { marginTop: 16 }]}
+              style={styles.languageCloseButton}
               onPress={() => setShowLanguageModal(false)}
             >
-              <Text style={styles.cancelButtonText}>{t('guest.cancel')}</Text>
+              <Text style={styles.languageCloseButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -591,18 +684,16 @@ const styles = StyleSheet.create({
   googleButton: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: Colors.secondary,
+    borderColor: '#dadce0',
   },
-  facebookButton: {
-    backgroundColor: '#1877F2',
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
   socialButtonText: {
     color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  facebookButtonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -734,27 +825,78 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text.secondary,
   },
+  languageModalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  languageModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  languageOptionsContainer: {
+    gap: 12,
+  },
   languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: Colors.secondary,
-    marginBottom: 12,
+    backgroundColor: Colors.background,
   },
   languageOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.primary + '08',
+  },
+  languageOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  languageFlag: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  languageTextContainer: {
+    flex: 1,
   },
   languageOptionText: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '600',
     color: Colors.text.primary,
   },
   languageOptionTextSelected: {
     color: Colors.primary,
+  },
+  languageSubtext: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  languageCloseButton: {
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+  },
+  languageCloseButtonText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: Colors.text.primary,
   },
 });
 

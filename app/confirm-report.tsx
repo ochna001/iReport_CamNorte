@@ -2,15 +2,15 @@ import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthProvider';
@@ -25,12 +25,12 @@ type Agency = 'PNP' | 'BFP' | 'PDRRMO';
 const ConfirmReportScreen = () => {
   const router = useRouter();
   const { session, isGuestMode, signInAnonymously } = useAuth();
-  const { draft, clearDraft } = useReportDraft();
-  const { agency } = useLocalSearchParams<{ agency: Agency }>();
+  const { draft, clearDraft, deleteSavedDraft } = useReportDraft();
+  const { agency, draftId } = useLocalSearchParams<{ agency: Agency; draftId?: string }>();
   const { t } = useLanguage();
 
   // Get data from draft context
-  const { media, latitude, longitude, name, age, description, phone } = draft;
+  const { media, latitude, longitude, reporterLatitude, reporterLongitude, name, age, description, phone } = draft;
   const mediaUris = JSON.stringify(media.map(m => m.uri));
 
   const [address, setAddress] = useState<string>('Loading address...');
@@ -90,21 +90,6 @@ const ConfirmReportScreen = () => {
     try {
       setSubmitting(true);
 
-      // If user is in guest mode (no session), create anonymous session now
-      let reporterId = session?.user?.id || null;
-      if (isGuestMode && !session) {
-        try {
-          await signInAnonymously();
-          // Get the new session after anonymous sign-in
-          const { data: { session: newSession } } = await supabase.auth.getSession();
-          reporterId = newSession?.user?.id || null;
-          console.log('Created anonymous session for report submission:', reporterId);
-        } catch (authError) {
-          console.error('Failed to create anonymous session:', authError);
-          // Continue without session - report will be submitted without reporter_id
-        }
-      }
-
       // Check if online
       const online = await isOnline();
       
@@ -122,14 +107,21 @@ const ConfirmReportScreen = () => {
                   name,
                   age,
                   description,
-                  latitude,
-                  longitude,
+                  latitude: latitude?.toString() || '0',
+                  longitude: longitude?.toString() || '0',
+                  reporterLatitude: reporterLatitude?.toString(),
+                  reporterLongitude: reporterLongitude?.toString(),
                   address,
                   mediaUris,
                 });
                 
                 // Clear draft after queuing
                 await clearDraft();
+
+                // If this report came from a saved draft, remove it from the drafts list
+                if (draftId) {
+                  await deleteSavedDraft(draftId as string);
+                }
                 
                 router.replace({
                   pathname: '/report-success',
@@ -153,11 +145,109 @@ const ConfirmReportScreen = () => {
         return;
       }
 
+      // Check for duplicate reports (same location, description, agency within last 5 minutes)
+      if (latitude && longitude) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: existingReports } = await supabase
+          .from('incidents')
+          .select('id, description, created_at')
+          .eq('agency_type', agency.toLowerCase())
+          .gte('created_at', fiveMinutesAgo)
+          .gte('latitude', latitude - 0.001) // ~100m radius
+          .lte('latitude', latitude + 0.001)
+          .gte('longitude', longitude - 0.001)
+          .lte('longitude', longitude + 0.001);
+
+        if (existingReports && existingReports.length > 0) {
+          // Check if description is similar (simple check)
+          const similarReport = existingReports.find(r => 
+            r.description.toLowerCase().includes(description.toLowerCase().substring(0, 20)) ||
+            description.toLowerCase().includes(r.description.toLowerCase().substring(0, 20))
+          );
+          
+          if (similarReport) {
+            Alert.alert(
+              t('confirm.duplicateTitle'),
+              t('confirm.duplicateMessage'),
+              [
+                { text: t('common.cancel'), style: 'cancel', onPress: () => setSubmitting(false) },
+                { text: t('confirm.submitAnyway'), onPress: () => proceedWithSubmission() },
+              ]
+            );
+            return;
+          }
+        }
+      }
+
+      await proceedWithSubmission();
+    } catch (error) {
+      console.error('Submit error:', error);
+      Alert.alert(t('confirm.error'), t('confirm.errorMessage'));
+      setSubmitting(false);
+    }
+  };
+
+  const proceedWithSubmission = async () => {
+    try {
+      // Get or create reporter ID
+      let reporterId = session?.user?.id || null;
+      if (isGuestMode && !session) {
+        try {
+          await signInAnonymously();
+          const { data: { session: newSession } } = await supabase.auth.getSession();
+          reporterId = newSession?.user?.id || null;
+          console.log('Created anonymous session for report submission:', reporterId);
+        } catch (authError) {
+          console.error('Failed to create anonymous session:', authError);
+        }
+      }
+
       // 1. Upload media files to Supabase Storage
       const uploadedMediaUrls: string[] = [];
       
       for (const mediaItem of media) {
-        const fileExt = mediaItem.uri.split('.').pop() || 'jpg';
+        // Get file extension from URI, handling query params
+        const uriWithoutParams = mediaItem.uri.split('?')[0];
+        let fileExt = uriWithoutParams.split('.').pop()?.toLowerCase() || 'jpg';
+        
+        // Normalize extension
+        if (fileExt === 'jpeg') fileExt = 'jpg';
+        
+        // Determine content type based on media type
+        let contentType: string;
+        if (mediaItem.type === 'video') {
+          // Common video extensions and their MIME types
+          const videoMimeTypes: Record<string, string> = {
+            'mp4': 'video/mp4',
+            'mov': 'video/quicktime',
+            'avi': 'video/x-msvideo',
+            'mkv': 'video/x-matroska',
+            'webm': 'video/webm',
+            '3gp': 'video/3gpp',
+          };
+          contentType = videoMimeTypes[fileExt] || 'video/mp4';
+          // Ensure video has proper extension
+          if (!['mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'].includes(fileExt)) {
+            fileExt = 'mp4';
+          }
+        } else {
+          // Image MIME types
+          const imageMimeTypes: Record<string, string> = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'heic': 'image/heic',
+            'heif': 'image/heif',
+          };
+          contentType = imageMimeTypes[fileExt] || 'image/jpeg';
+          // Ensure image has proper extension
+          if (!['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'].includes(fileExt)) {
+            fileExt = 'jpg';
+          }
+        }
+        
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `incidents/${fileName}`;
 
@@ -166,11 +256,13 @@ const ConfirmReportScreen = () => {
         const arrayBuffer = await response.arrayBuffer();
         const fileData = new Uint8Array(arrayBuffer);
 
+        console.log(`Uploading ${mediaItem.type}: ${fileName} (${contentType})`);
+
         // Upload to Supabase Storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('incident-media')
           .upload(filePath, fileData, {
-            contentType: `image/${fileExt}`,
+            contentType: contentType,
             cacheControl: '3600',
           });
 
@@ -184,6 +276,7 @@ const ConfirmReportScreen = () => {
           .from('incident-media')
           .getPublicUrl(filePath);
 
+        console.log(`Uploaded successfully: ${urlData.publicUrl}`);
         uploadedMediaUrls.push(urlData.publicUrl);
       }
 
@@ -196,6 +289,8 @@ const ConfirmReportScreen = () => {
         description: description,
         latitude: latitude,
         longitude: longitude,
+        reporter_latitude: reporterLatitude,
+        reporter_longitude: reporterLongitude,
         location_address: address,
         media_urls: uploadedMediaUrls,
         status: 'pending',
@@ -215,15 +310,71 @@ const ConfirmReportScreen = () => {
 
       if (incidentError) throw incidentError;
 
-      // 3. Clear draft after successful submission
+      // 3. Auto-assign to nearest station
+      let assignedStationName: string | null = null;
+      try {
+        // Get agency_id for the agency type
+        const agencyIdMap: Record<string, number> = {
+          'pnp': 1,
+          'bfp': 2,
+          'pdrrmo': 3,
+        };
+        const agencyId = agencyIdMap[agency.toLowerCase()];
+        
+        if (agencyId && latitude && longitude) {
+          // Call the find_nearest_station function
+          const { data: nearestStation, error: stationError } = await supabase
+            .rpc('find_nearest_station', {
+              incident_lat: latitude,
+              incident_lon: longitude,
+              target_agency_id: agencyId,
+            })
+            .single<{ id: number; name: string; distance: number }>();
+
+          if (!stationError && nearestStation) {
+            // Update incident with assigned station
+            await supabase
+              .from('incidents')
+              .update({ 
+                assigned_station_id: nearestStation.id,
+                status: 'assigned'
+              })
+              .eq('id', incident.id);
+            
+            // Add status history entry for auto-assignment
+            await supabase
+              .from('incident_status_history')
+              .insert({
+                incident_id: incident.id,
+                status: 'assigned',
+                notes: `Auto-assigned to ${nearestStation.name} (${nearestStation.distance?.toFixed(2)} km away)`,
+                changed_by: 'System',
+              });
+            
+            assignedStationName = nearestStation.name;
+            console.log(`Auto-assigned to station: ${nearestStation.name} (${nearestStation.distance?.toFixed(2)} km away)`);
+          }
+        }
+      } catch (assignError) {
+        // Don't fail the submission if auto-assignment fails
+        console.warn('Auto-assignment failed:', assignError);
+      }
+
+      // 4. Clear draft after successful submission
       await clearDraft();
 
-      // 4. Navigate to success screen
+      // If this report came from a saved draft, remove it from the drafts list
+      if (draftId) {
+        await deleteSavedDraft(draftId as string);
+      }
+
+      // 5. Navigate to success screen
       router.replace({
         pathname: '/report-success',
         params: {
           incidentId: incident.id,
           agency: agency,
+          assignedStation: assignedStationName || '',
         },
       });
 

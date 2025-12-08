@@ -33,11 +33,11 @@ export interface GeocodedAddress {
 export async function reverseGeocodeWithGoogle(
   latitude: number,
   longitude: number,
-  retries = 2
+  retries = 3
 ): Promise<GeocodedAddress> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout (increased)
 
     const response = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
@@ -87,17 +87,21 @@ export async function reverseGeocodeWithGoogle(
       city: getComponent('locality') || getComponent('administrative_area_level_2'),
     };
   } catch (err: any) {
-    console.error('Google Geocoding error:', err);
+    // Only log non-abort errors to reduce console noise
+    if (err.name !== 'AbortError') {
+      console.error('Google Geocoding error:', err);
+    }
     
-    // Retry on network errors
-    if (retries > 0 && (err.name === 'AbortError' || err.message?.includes('Network request failed'))) {
-      console.log(`Retrying geocoding... (${retries} attempts left)`);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+    // Retry on network errors or timeouts with exponential backoff
+    if (retries > 0 && (err.name === 'AbortError' || err.message?.includes('Network request failed') || err.message?.includes('Aborted'))) {
+      const delay = (4 - retries) * 1500; // 1.5s, 3s, 4.5s backoff
+      console.log(`Geocoding timeout/error, retrying in ${delay/1000}s... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
       return reverseGeocodeWithGoogle(latitude, longitude, retries - 1);
     }
     
-    // Return fallback address instead of throwing
-    console.warn('Using fallback address due to geocoding failure');
+    // Return fallback address instead of throwing - user can manually search
+    console.warn('Geocoding failed after retries, user can search manually');
     return {
       street: null,
       postalCode: null,

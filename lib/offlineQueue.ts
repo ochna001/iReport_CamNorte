@@ -12,6 +12,8 @@ export interface QueuedIncident {
   description: string;
   latitude: string;
   longitude: string;
+  reporterLatitude?: string;
+  reporterLongitude?: string;
   address: string;
   mediaUris: string;
   timestamp: number;
@@ -112,8 +114,43 @@ export async function processQueue(
       const uploadedMediaUrls: string[] = [];
       const media = JSON.parse(incident.mediaUris);
 
-      for (const mediaUri of media) {
-        const fileExt = mediaUri.split('.').pop() || 'jpg';
+      for (const mediaItem of media) {
+        // Handle both string URIs and objects with uri/type
+        const mediaUri = typeof mediaItem === 'string' ? mediaItem : mediaItem.uri;
+        const mediaType = typeof mediaItem === 'string' ? 'image' : (mediaItem.type || 'image');
+        
+        // Get file extension, handling query params
+        const uriWithoutParams = mediaUri.split('?')[0];
+        let fileExt = uriWithoutParams.split('.').pop()?.toLowerCase() || 'jpg';
+        
+        // Determine content type based on media type
+        let contentType: string;
+        if (mediaType === 'video') {
+          const videoMimeTypes: Record<string, string> = {
+            'mp4': 'video/mp4',
+            'mov': 'video/quicktime',
+            'avi': 'video/x-msvideo',
+            'webm': 'video/webm',
+            '3gp': 'video/3gpp',
+          };
+          contentType = videoMimeTypes[fileExt] || 'video/mp4';
+          if (!['mp4', 'mov', 'avi', 'webm', '3gp'].includes(fileExt)) {
+            fileExt = 'mp4';
+          }
+        } else {
+          const imageMimeTypes: Record<string, string> = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+          };
+          contentType = imageMimeTypes[fileExt] || 'image/jpeg';
+          if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+            fileExt = 'jpg';
+          }
+        }
+        
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `incidents/${fileName}`;
 
@@ -124,7 +161,7 @@ export async function processQueue(
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('incident-media')
           .upload(filePath, fileData, {
-            contentType: `image/${fileExt}`,
+            contentType: contentType,
             cacheControl: '3600',
           });
 
@@ -139,23 +176,76 @@ export async function processQueue(
 
       // Create incident record
       const { data: user } = await supabase.auth.getUser();
-      const { error: incidentError } = await supabase
+      const incidentData: any = {
+        agency_type: incident.agency.toLowerCase(),
+        reporter_id: user?.user?.id || null,
+        reporter_name: incident.name,
+        reporter_age: parseInt(incident.age),
+        description: incident.description,
+        latitude: parseFloat(incident.latitude),
+        longitude: parseFloat(incident.longitude),
+        location_address: incident.address,
+        media_urls: uploadedMediaUrls,
+        status: 'pending',
+        created_at: new Date(incident.timestamp).toISOString(),
+      };
+      
+      // Add reporter location if available
+      if (incident.reporterLatitude && incident.reporterLongitude) {
+        incidentData.reporter_latitude = parseFloat(incident.reporterLatitude);
+        incidentData.reporter_longitude = parseFloat(incident.reporterLongitude);
+      }
+      
+      const { data: createdIncident, error: incidentError } = await supabase
         .from('incidents')
-        .insert({
-          agency_type: incident.agency.toLowerCase(),
-          reporter_id: user?.user?.id || null,
-          reporter_name: incident.name,
-          reporter_age: parseInt(incident.age),
-          description: incident.description,
-          latitude: parseFloat(incident.latitude),
-          longitude: parseFloat(incident.longitude),
-          location_address: incident.address,
-          media_urls: uploadedMediaUrls,
-          status: 'pending',
-          created_at: new Date(incident.timestamp).toISOString(),
-        });
+        .insert(incidentData)
+        .select()
+        .single();
 
       if (incidentError) throw incidentError;
+
+      // Auto-assign to nearest station
+      try {
+        const agencyIdMap: Record<string, number> = {
+          'pnp': 1,
+          'bfp': 2,
+          'pdrrmo': 3,
+        };
+        const agencyId = agencyIdMap[incident.agency.toLowerCase()];
+        
+        if (agencyId && createdIncident) {
+          const { data: nearestStation, error: stationError } = await supabase
+            .rpc('find_nearest_station', {
+              incident_lat: parseFloat(incident.latitude),
+              incident_lon: parseFloat(incident.longitude),
+              target_agency_id: agencyId,
+            })
+            .single<{ id: number; name: string; distance: number }>();
+
+          if (!stationError && nearestStation) {
+            await supabase
+              .from('incidents')
+              .update({ 
+                assigned_station_id: nearestStation.id,
+                status: 'assigned'
+              })
+              .eq('id', createdIncident.id);
+            
+            await supabase
+              .from('incident_status_history')
+              .insert({
+                incident_id: createdIncident.id,
+                status: 'assigned',
+                notes: `Auto-assigned to ${nearestStation.name} (${nearestStation.distance?.toFixed(2)} km away)`,
+                changed_by: 'System',
+              });
+            
+            console.log(`Queued incident auto-assigned to: ${nearestStation.name}`);
+          }
+        }
+      } catch (assignError) {
+        console.warn('Auto-assignment failed for queued incident:', assignError);
+      }
 
       // Success - remove from queue
       await removeFromQueue(incident.id);

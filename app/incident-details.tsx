@@ -1,23 +1,32 @@
+import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Building2, Calendar, Clock, FileText, MapPin, Phone, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Linking,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Linking,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../constants/colors';
+import { useLanguage } from '../contexts/LanguageProvider';
 import { supabase } from '../lib/supabase';
 import LocationCard from './components/LocationCard';
+
+// Helper to check if URL is a video
+const isVideoUrl = (url: string): boolean => {
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'];
+  const lowerUrl = url.toLowerCase();
+  return videoExtensions.some(ext => lowerUrl.includes(ext));
+};
 
 interface Incident {
   id: string;
@@ -27,6 +36,8 @@ interface Incident {
   location_address: string;
   latitude: number;
   longitude: number;
+  reporter_latitude?: number;
+  reporter_longitude?: number;
   created_at: string;
   updated_at: string;
   media_urls: string[];
@@ -64,6 +75,7 @@ export default function IncidentDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const incidentId = params.id as string;
+  const { t } = useLanguage();
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,7 +228,7 @@ export default function IncidentDetailsScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading incident details...</Text>
+        <Text style={styles.loadingText}>Loading incident details...  </Text>
       </View>
     );
   }
@@ -260,7 +272,7 @@ export default function IncidentDetailsScreen() {
         </View>
 
         {/* Media Gallery */}
-        {incident.media_urls && incident.media_urls.length > 0 && (
+        {incident.media_urls && incident.media_urls.length > 0 ? (
           <View style={styles.mediaSection}>
             <ScrollView 
               horizontal 
@@ -272,12 +284,25 @@ export default function IncidentDetailsScreen() {
               }}
             >
               {incident.media_urls.map((url, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: url }}
-                  style={styles.mediaImage}
-                  resizeMode="cover"
-                />
+                <View key={index} style={styles.mediaImageContainer}>
+                  {isVideoUrl(url) ? (
+                    <Video
+                      source={{ uri: url }}
+                      style={styles.mediaVideo}
+                      useNativeControls
+                      resizeMode={ResizeMode.COVER}
+                      isLooping={false}
+                      onError={(error) => console.log('Video load error:', error, 'URL:', url)}
+                    />
+                  ) : (
+                    <Image
+                      source={{ uri: url }}
+                      style={styles.mediaImage}
+                      resizeMode="cover"
+                      onError={(e) => console.log('Image load error:', e.nativeEvent.error, 'URL:', url)}
+                    />
+                  )}
+                </View>
               ))}
             </ScrollView>
             {incident.media_urls.length > 1 && (
@@ -293,6 +318,10 @@ export default function IncidentDetailsScreen() {
                 ))}
               </View>
             )}
+          </View>
+        ) : (
+          <View style={styles.noMediaSection}>
+            <Text style={styles.noMediaText}>No media attached</Text>
           </View>
         )}
 
@@ -312,22 +341,45 @@ export default function IncidentDetailsScreen() {
           <Text style={styles.descriptionText}>{incident.description}</Text>
         </View>
 
-        {/* Location */}
-        <LocationCard
-          location={{
-            coords: {
-              latitude: incident.latitude,
-              longitude: incident.longitude,
-              altitude: null,
-              accuracy: null,
-              altitudeAccuracy: null,
-              heading: null,
-              speed: null,
-            },
-            timestamp: new Date(incident.created_at).getTime(),
-          }}
-          title="🚨 Incident Location"
-        />
+        {/* Incident Location */}
+        <View style={styles.locationCardWrapper}>
+          <LocationCard
+            location={{
+              coords: {
+                latitude: incident.latitude,
+                longitude: incident.longitude,
+                altitude: null,
+                accuracy: null,
+                altitudeAccuracy: null,
+                heading: null,
+                speed: null,
+              },
+              timestamp: new Date(incident.created_at).getTime(),
+            }}
+            title={t('details.incidentLocation')}
+          />
+        </View>
+
+        {/* Reporter Location (if different from incident) */}
+        {incident.reporter_latitude && incident.reporter_longitude && (
+          <View style={styles.locationCardWrapper}>
+            <LocationCard
+              location={{
+                coords: {
+                  latitude: incident.reporter_latitude,
+                  longitude: incident.reporter_longitude,
+                  altitude: null,
+                  accuracy: null,
+                  altitudeAccuracy: null,
+                  heading: null,
+                  speed: null,
+                },
+                timestamp: new Date(incident.created_at).getTime(),
+              }}
+              title={t('details.reporterLocation')}
+            />
+          </View>
+        )}
 
         {/* Date & Time */}
         <View style={styles.section}>
@@ -574,10 +626,38 @@ const styles = StyleSheet.create({
   mediaSection: {
     marginBottom: 16,
   },
+  mediaImageContainer: {
+    width: width,
+    height: 300,
+    backgroundColor: Colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   mediaImage: {
     width: width,
     height: 300,
     backgroundColor: Colors.secondary,
+  },
+  mediaVideo: {
+    width: width,
+    height: 300,
+    backgroundColor: '#000',
+  },
+  noMediaSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 24,
+    backgroundColor: Colors.secondary + '40',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  noMediaText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  locationCardWrapper: {
+    marginHorizontal: 16,
   },
   mediaPagination: {
     flexDirection: 'row',

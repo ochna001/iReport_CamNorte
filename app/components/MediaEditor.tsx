@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
@@ -199,14 +199,14 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onCancel} style={styles.headerButton}>
-            <Text style={styles.headerButtonText}>Cancel</Text>
+            <Text style={styles.headerButtonText}>Cancel </Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Photo</Text>
+          <Text style={styles.headerTitle}>Edit Photo  </Text>
           <TouchableOpacity onPress={handleSave} style={styles.headerButton} disabled={saving}>
             {saving ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
-              <Text style={[styles.headerButtonText, styles.saveButton]}>Done</Text>
+              <Text style={[styles.headerButtonText, styles.saveButton, hasContent && styles.saveButtonActive]}>Done</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -340,7 +340,7 @@ const MediaEditor: React.FC<MediaEditorProps> = ({
               disabled={!hasContent}
             >
               <Text style={styles.actionIcon}>↩️</Text>
-              <Text style={[styles.actionText, !hasContent && styles.actionTextDisabled]}>Undo</Text>
+              <Text style={[styles.actionText, !hasContent && styles.actionTextDisabled]}>Undo </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -372,20 +372,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingTop: 20,
+    paddingBottom: 20,
     backgroundColor: '#1a1a1a',
   },
   headerButton: {
     padding: 8,
+    paddingBottom: 2,
   },
   headerButtonText: {
     color: '#fff',
     fontSize: 16,
   },
   saveButton: {
-    color: Colors.primary,
+    color: '#888',
     fontWeight: '600',
+  },
+  saveButtonActive: {
+    color: '#fff',
   },
   headerTitle: {
     color: '#fff',
@@ -414,26 +418,28 @@ const styles = StyleSheet.create({
   },
   toolsContainer: {
     backgroundColor: '#1a1a1a',
-    padding: 16,
-    paddingBottom: 40,
+    padding: 24,
+    paddingBottom: 48,
   },
   toolsTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   toolsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 16,
+    marginBottom: 24,
+    paddingHorizontal: 8,
   },
   toolButton: {
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 14,
     backgroundColor: '#2a2a2a',
-    minWidth: 70,
+    minWidth: 76,
   },
   toolButtonActive: {
     backgroundColor: Colors.primary,
@@ -467,8 +473,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 24,
+    gap: 16,
   },
   sizeLabel: {
     color: '#888',
@@ -495,15 +501,15 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
-    marginBottom: 12,
+    gap: 24,
+    marginBottom: 20,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    padding: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: '#2a2a2a',
   },
   actionButtonDisabled: {
@@ -522,8 +528,9 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: '#666',
-    fontSize: 12,
+    fontSize: 13,
     textAlign: 'center',
+    marginTop: 8,
   },
 });
 

@@ -1,11 +1,13 @@
 import * as Location from 'expo-location';
-import { ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
-import React, { Component, useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp, MapPin, Search, X } from 'lucide-react-native';
+import React, { Component, useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    FlatList,
     Platform,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -85,6 +87,18 @@ interface LocationCardProps {
   onLocationChange?: (location: Location.LocationObject) => void;
 }
 
+// Google Maps API Key for Places autocomplete
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+interface PlaceSuggestion {
+  place_id: string;
+  description: string;
+  structured_formatting?: {
+    main_text: string;
+    secondary_text: string;
+  };
+}
+
 const LocationCard: React.FC<LocationCardProps> = ({
   location,
   title = '📍 Location',
@@ -99,6 +113,13 @@ const LocationCard: React.FC<LocationCardProps> = ({
   const [mapError, setMapError] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  
+  // Address search fallback state
+  const [geocodingFailed, setGeocodingFailed] = useState(false);
+  const [showAddressSearch, setShowAddressSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   
   // Maps now use Google Places API which works in all builds
   const shouldShowMap = true;
@@ -144,14 +165,108 @@ const LocationCard: React.FC<LocationCardProps> = ({
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
       setLoading(true);
+      setGeocodingFailed(false);
       const result = await reverseGeocodeWithOSM(latitude, longitude);
       const formattedAddress = formatPhilippineAddress(result.formattedAddress);
-      setAddress(formattedAddress);
+      
+      // Check if the address is just coordinates (geocoding failed)
+      const isCoordinatesOnly = formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) ||
+                                formattedAddress.includes('Location:') ||
+                                formattedAddress === 'Address not found';
+      
+      if (isCoordinatesOnly) {
+        setGeocodingFailed(true);
+        setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+      } else {
+        setAddress(formattedAddress);
+      }
     } catch (error) {
       console.error('Reverse geocoding error:', error);
-      setAddress('Unable to fetch address');
+      setGeocodingFailed(true);
+      setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Search for address suggestions using Google Places Autocomplete
+  const searchAddresses = useCallback(async (query: string) => {
+    if (!query || query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:ph&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.predictions) {
+        setSuggestions(data.predictions.slice(0, 5));
+      } else {
+        setSuggestions([]);
+      }
+    } catch (error) {
+      console.error('Address search error:', error);
+      setSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery) {
+        searchAddresses(searchQuery);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchAddresses]);
+
+  // Select a suggestion and get its coordinates
+  const selectSuggestion = async (suggestion: PlaceSuggestion) => {
+    setSearchLoading(true);
+    try {
+      // Get place details to get coordinates
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&fields=geometry,formatted_address&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.result?.geometry?.location) {
+        const { lat, lng } = data.result.geometry.location;
+        
+        // Update location
+        if (onLocationChange) {
+          const newLocation: Location.LocationObject = {
+            coords: {
+              latitude: lat,
+              longitude: lng,
+              altitude: null,
+              accuracy: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+            },
+            timestamp: Date.now(),
+          };
+          onLocationChange(newLocation);
+        }
+        
+        // Update address directly from the selected suggestion
+        setAddress(formatPhilippineAddress(data.result.formatted_address || suggestion.description));
+        setGeocodingFailed(false);
+        setShowAddressSearch(false);
+        setSearchQuery('');
+        setSuggestions([]);
+      }
+    } catch (error) {
+      console.error('Place details error:', error);
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -204,14 +319,82 @@ const LocationCard: React.FC<LocationCardProps> = ({
       {loading ? (
         <ActivityIndicator size="small" color={Colors.primary} style={styles.loader} />
       ) : (
-        <Text style={styles.address}>{address}</Text>
+        <View>
+          <Text style={styles.address}>{address}</Text>
+          {geocodingFailed && editable && (
+            <TouchableOpacity 
+              style={styles.searchAddressButton}
+              onPress={() => setShowAddressSearch(true)}
+            >
+              <Search size={14} color={Colors.primary} />
+              <Text style={styles.searchAddressText}>Search for address</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Address Search Input */}
+      {showAddressSearch && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputRow}>
+            <Search size={18} color={Colors.text.secondary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Type address to search..."
+              placeholderTextColor={Colors.text.secondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => {
+              setShowAddressSearch(false);
+              setSearchQuery('');
+              setSuggestions([]);
+            }}>
+              <X size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          
+          {searchLoading && (
+            <ActivityIndicator size="small" color={Colors.primary} style={styles.searchLoader} />
+          )}
+          
+          {suggestions.length > 0 && (
+            <FlatList
+              data={suggestions}
+              keyExtractor={(item) => item.place_id}
+              style={styles.suggestionsList}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.suggestionItem}
+                  onPress={() => selectSuggestion(item)}
+                >
+                  <MapPin size={16} color={Colors.primary} />
+                  <View style={styles.suggestionTextContainer}>
+                    <Text style={styles.suggestionMainText}>
+                      {item.structured_formatting?.main_text || item.description.split(',')[0]}
+                    </Text>
+                    <Text style={styles.suggestionSecondaryText} numberOfLines={1}>
+                      {item.structured_formatting?.secondary_text || item.description}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+          
+          {searchQuery.length > 0 && searchQuery.length < 3 && (
+            <Text style={styles.searchHint}>Type at least 3 characters to search</Text>
+          )}
+        </View>
       )}
 
       <Text style={styles.coordinates}>
         {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
       </Text>
 
-      {editable && (
+      {editable && !showAddressSearch && (
         <Text style={styles.hint}>Tap map to change location</Text>
       )}
 
@@ -417,6 +600,77 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     fontWeight: '600',
+  },
+  searchAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.primary + '15',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  searchAddressText: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  searchContainer: {
+    marginTop: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+  },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text.primary,
+    paddingVertical: 8,
+  },
+  searchLoader: {
+    marginTop: 12,
+  },
+  suggestionsList: {
+    marginTop: 12,
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  suggestionTextContainer: {
+    flex: 1,
+  },
+  suggestionMainText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  suggestionSecondaryText: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  searchHint: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+    marginTop: 12,
+    textAlign: 'center',
   },
 });
 

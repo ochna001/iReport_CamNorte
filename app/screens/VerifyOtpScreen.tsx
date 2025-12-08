@@ -1,4 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,16 +18,15 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
-import * as Clipboard from 'expo-clipboard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const VerifyOtpScreen = () => {
   const router = useRouter();
-  const { email, displayName, dateOfBirth, phoneNumber } = useLocalSearchParams<{ 
+  const { email, displayName, dateOfBirth, phoneNumber, password } = useLocalSearchParams<{ 
     email: string;
     displayName: string;
     dateOfBirth: string;
     phoneNumber: string;
+    password: string;
   }>();
   const [otp, setOtp] = useState(Array(6).fill(''));
   const [loading, setLoading] = useState(false);
@@ -164,6 +167,30 @@ const VerifyOtpScreen = () => {
         console.error('Metadata update error:', updateError);
       }
 
+      // Wait for the trigger to complete creating the profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Update profile details using RPC function (bypasses RLS)
+      const { data: rpcResult, error: profileUpdateError } = await supabase
+        .rpc('update_user_profile_after_signup', {
+          user_id: data.user.id,
+          p_display_name: displayName || 'User',
+          p_phone_number: phoneNumber || '',
+          p_age: age,
+          p_date_of_birth: dateOfBirth || null,
+        });
+
+      if (profileUpdateError || (rpcResult && !rpcResult.success)) {
+        console.error('Profile update error:', profileUpdateError || rpcResult?.message);
+        // Non-blocking: allow the flow to continue but inform the user
+        Alert.alert(
+          'Profile Update Warning',
+          'Your account was created but we could not save your profile details automatically. You can update them later from your profile screen.'
+        );
+      } else {
+        console.log('Profile updated successfully via RPC');
+      }
+
       // Link guest reports to new account
       const guestSessionId = await AsyncStorage.getItem('@guest_session_id');
       if (guestSessionId) {
@@ -182,42 +209,22 @@ const VerifyOtpScreen = () => {
           await AsyncStorage.removeItem('@guest_session_id');
         }
       }
+    }
 
-      // Create or update profile
-      // First try to insert, if it fails due to existing profile, update it
-      const { error: insertError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        display_name: displayName || 'User',
-        email: email,
-        role: 'Resident',
-        phone_number: phoneNumber || '',
-        age: age,
-        date_of_birth: dateOfBirth || null,
-      });
-
-      // If insert failed (profile might already exist from trigger), try updating
-      if (insertError) {
-        console.log('Profile insert failed, attempting update:', insertError);
-        const { error: updateProfileError } = await supabase
-          .from('profiles')
-          .update({
-            display_name: displayName || 'User',
-            phone_number: phoneNumber || '',
-            age: age,
-            date_of_birth: dateOfBirth || null,
-          })
-          .eq('id', data.user.id);
-
-        if (updateProfileError) {
-          setLoading(false);
-          console.error('Profile update error:', updateProfileError);
-          Alert.alert(
-            'Profile Update Failed', 
-            'An error occurred while updating your profile. However, your account was created successfully. You can update your profile later from the settings.'
-          );
-          // Don't return here - allow user to continue
-        }
+    // Enable biometric by default if device supports it
+    try {
+      const biometricAvailable = await LocalAuthentication.hasHardwareAsync();
+      if (biometricAvailable && email && password) {
+        // Enable biometric login by default
+        await AsyncStorage.setItem('biometric_enabled', 'true');
+        // Save credentials securely for biometric login
+        await SecureStore.setItemAsync('biometric_email', email);
+        await SecureStore.setItemAsync('biometric_password', password);
+        console.log('Biometric login enabled by default for new user');
       }
+    } catch (biometricError) {
+      console.error('Error setting up biometric:', biometricError);
+      // Non-critical, continue anyway
     }
 
     setLoading(false);

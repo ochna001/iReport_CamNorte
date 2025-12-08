@@ -17,7 +17,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useLanguage } from '../../contexts/LanguageProvider';
 import { useReportDraft } from '../../contexts/ReportDraftProvider';
-import { getQueue, processQueue, QueuedIncident } from '../../lib/offlineQueue';
+import { getQueue, processQueue, QueuedIncident, removeFromQueue } from '../../lib/offlineQueue';
 import { supabase } from '../../lib/supabase';
 
 interface Incident {
@@ -93,6 +93,25 @@ export default function ReportsScreen() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  // Delete a queued report
+  const handleDeleteQueuedReport = (report: QueuedIncident) => {
+    Alert.alert(
+      t('reports.deleteQueuedTitle'),
+      t('reports.deleteQueuedMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            await removeFromQueue(report.id);
+            fetchPendingReports();
+          },
+        },
+      ]
+    );
   };
 
   const fetchIncidents = async () => {
@@ -212,7 +231,7 @@ export default function ReportsScreen() {
     loadDraftFromList(draft.id);
     router.push({
       pathname: '/incident-form',
-      params: { agency: draft.agency || 'PNP' },
+      params: { agency: draft.agency || 'PNP', draftId: draft.id },
     });
   };
 
@@ -318,12 +337,20 @@ export default function ReportsScreen() {
           </Text>
           {pendingReports.slice(0, 3).map((report, index) => (
             <View key={report.id} style={styles.pendingItem}>
-              <Text style={styles.pendingItemAgency}>
-                {report.agency === 'PNP' ? '🚔' : report.agency === 'BFP' ? '🔥' : '🌊'} {report.agency}
-              </Text>
-              <Text style={styles.pendingItemDesc} numberOfLines={1}>
-                {report.description}
-              </Text>
+              <View style={styles.pendingItemContent}>
+                <Text style={styles.pendingItemAgency}>
+                  {report.agency === 'PNP' ? '🚔' : report.agency === 'BFP' ? '🔥' : '🌊'} {report.agency}
+                </Text>
+                <Text style={styles.pendingItemDesc} numberOfLines={1}>
+                  {report.description}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => handleDeleteQueuedReport(report)}
+                style={styles.pendingDeleteBtn}
+              >
+                <Text style={styles.pendingDeleteText}>✕</Text>
+              </TouchableOpacity>
             </View>
           ))}
           {pendingReports.length > 3 && (
@@ -696,6 +723,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pendingItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   pendingItemAgency: {
     fontSize: 12,
@@ -708,6 +741,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#856404',
+  },
+  pendingDeleteBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  pendingDeleteText: {
+    fontSize: 14,
+    color: '#856404',
+    fontWeight: 'bold',
   },
   pendingMore: {
     fontSize: 12,
