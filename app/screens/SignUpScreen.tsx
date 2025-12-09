@@ -196,6 +196,23 @@ const SignUpScreen = () => {
     setLoading(true);
 
     try {
+      // Check for duplicate email in profiles (catches OAuth accounts too)
+      const { data: existingEmail, error: emailCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (emailCheckError) {
+        console.error('Error checking email:', emailCheckError);
+      }
+
+      if (existingEmail) {
+        setLoading(false);
+        Alert.alert('Email Already Registered', 'This email is already associated with an account. Please try logging in or use a different email.');
+        return;
+      }
+
       // Check for duplicate phone number in profiles
       const { data: existingPhone, error: phoneCheckError } = await supabase
         .from('profiles')

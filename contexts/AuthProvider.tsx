@@ -102,11 +102,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Listen for auth state changes - this also indicates we're online
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[AuthProvider] Auth state change:', _event, 'Session:', session?.user?.id);
+      
       setSession(session);
       setIsAnonymous(session?.user?.is_anonymous || false);
       
+      // If user signs out, clear all auth-related state
+      if (_event === 'SIGNED_OUT' || !session) {
+        setIsGuestMode(false);
+        setIsAnonymous(false);
+        await AsyncStorage.removeItem(GUEST_MODE_KEY);
+        await AsyncStorage.removeItem(GUEST_SESSION_KEY);
+      }
       // If user signs in with a real account (not anonymous), clear guest mode
-      if (session && !session.user.is_anonymous) {
+      else if (session && !session.user.is_anonymous) {
         setIsGuestMode(false);
         await AsyncStorage.removeItem(GUEST_MODE_KEY);
       }

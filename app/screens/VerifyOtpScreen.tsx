@@ -5,16 +5,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -181,14 +181,18 @@ const VerifyOtpScreen = () => {
         });
 
       if (profileUpdateError || (rpcResult && !rpcResult.success)) {
-        console.error('Profile update error:', profileUpdateError || rpcResult?.message);
+        const errorMsg = profileUpdateError?.message || rpcResult?.message || 'Unknown error';
+        console.error('Profile update error:', errorMsg);
+        console.error('Full error:', profileUpdateError);
+        console.error('RPC result:', rpcResult);
         // Non-blocking: allow the flow to continue but inform the user
         Alert.alert(
           'Profile Update Warning',
-          'Your account was created but we could not save your profile details automatically. You can update them later from your profile screen.'
+          `Your account was created but we could not save your profile details automatically. Error: ${errorMsg}\n\nYou can update them later from your profile screen.`
         );
       } else {
         console.log('Profile updated successfully via RPC');
+        console.log('RPC result:', rpcResult);
       }
 
       // Link guest reports to new account

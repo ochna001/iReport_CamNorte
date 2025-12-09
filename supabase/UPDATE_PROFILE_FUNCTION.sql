@@ -19,9 +19,18 @@ BEGIN
     display_name = p_display_name,
     phone_number = p_phone_number,
     age = p_age,
-    date_of_birth = p_date_of_birth,
-    updated_at = NOW()
+    date_of_birth = p_date_of_birth
+    -- updated_at removed as it may not exist in the table
   WHERE id = user_id;
+
+  -- Check if the update actually affected any rows
+  IF NOT FOUND THEN
+    result := json_build_object(
+      'success', false,
+      'message', 'Profile not found for user_id: ' || user_id::text
+    );
+    RETURN result;
+  END IF;
 
   -- Return success result
   result := json_build_object(

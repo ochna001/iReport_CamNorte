@@ -44,10 +44,13 @@ export default function AppHeader() {
       return () => {
         channel.unsubscribe();
       };
-    } else if (user) {
+    } else if (user && isAnonymous) {
+      // Anonymous user with session
       setDisplayName(`Guest #${user.id?.slice(-6).toUpperCase() || '89FA5FDB'}`);
     } else {
+      // No user session - clear display name and show Guest
       setDisplayName('Guest');
+      setUnreadCount(0);
     }
   }, [user, isAnonymous]);
 

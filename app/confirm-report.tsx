@@ -323,20 +323,21 @@ const ConfirmReportScreen = () => {
         
         if (agencyId && latitude && longitude) {
           // Call the find_nearest_station function
+          // RPC returns: station_id, station_name, distance_km
           const { data: nearestStation, error: stationError } = await supabase
             .rpc('find_nearest_station', {
               incident_lat: latitude,
               incident_lon: longitude,
               target_agency_id: agencyId,
             })
-            .single<{ id: number; name: string; distance: number }>();
+            .single<{ station_id: number; station_name: string; distance_km: number }>();
 
-          if (!stationError && nearestStation) {
+          if (!stationError && nearestStation && nearestStation.station_id) {
             // Update incident with assigned station
             await supabase
               .from('incidents')
               .update({ 
-                assigned_station_id: nearestStation.id,
+                assigned_station_id: nearestStation.station_id,
                 status: 'assigned'
               })
               .eq('id', incident.id);
@@ -347,12 +348,12 @@ const ConfirmReportScreen = () => {
               .insert({
                 incident_id: incident.id,
                 status: 'assigned',
-                notes: `Auto-assigned to ${nearestStation.name} (${nearestStation.distance?.toFixed(2)} km away)`,
+                notes: `Auto-assigned to ${nearestStation.station_name} (${nearestStation.distance_km?.toFixed(2)} km away)`,
                 changed_by: 'System',
               });
             
-            assignedStationName = nearestStation.name;
-            console.log(`Auto-assigned to station: ${nearestStation.name} (${nearestStation.distance?.toFixed(2)} km away)`);
+            assignedStationName = nearestStation.station_name;
+            console.log(`Auto-assigned to station: ${nearestStation.station_name} (${nearestStation.distance_km?.toFixed(2)} km away)`);
           }
         }
       } catch (assignError) {
